@@ -1,0 +1,46 @@
+datatype Belief = none | not_at_goal | in_danger | stopped
+
+datatype Action = null | move | emergency_stop | remove_danger
+
+datatype BelMod = lrn | fgt
+
+Plan(b) =
+  if b==not_at_goal
+    then ((lrn,none),move)
+  else if b==in_danger
+    then ((lrn,stopped),emergency_stop)
+  else -- b==stopped
+    ((fgt,stopped),remove_danger)
+
+datatype Phase = p | s | e
+
+upd(c,(lrn,b)) = b
+upd(c,(fgt,b)) = if b==c then none else c
+
+Select(b) = Plan(b)
+
+fst((x,y)) = x
+snd((x,y)) = y
+
+channel end
+channel bel : (BelMod,Belief)
+channel do  : Action
+
+datatype Trans = initialise | terminate | perceive | select | execute
+
+channel trans : Trans
+
+BDI =
+  let
+    BDI(b,pl,st) =
+      st==p & trans!terminate -> end -> STOP
+      []
+      st==p & trans!perceive -> bel?bm -> BDI(upd(b,bm),pl,s)
+      []
+      st==s & trans!select -> BDI(b,Select(b),e)
+      []
+      st==e & trans!execute -> do.snd(pl) -> BDI(upd(b,fst(pl)),pl,p)
+  within
+    trans!initialise -> BDI(none,((lrn,none),null),p)
+
+assert BDI :[divergence free]
