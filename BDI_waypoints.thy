@@ -12,7 +12,6 @@ datatype Action
   | inspect
   | null
 
-
 instantiation Action :: Haskell_Show.show
 begin
 
@@ -146,7 +145,6 @@ inductive_set
 "x \<in> bel_patterns B \<Longrightarrow> cpatlist xs \<in> bel_patterns B \<Longrightarrow>
 cpatlist (x # xs) \<in> bel_patterns B"
 
-
 fun pat_matches :: "AbstPat \<Rightarrow> ParamBelief set \<Rightarrow> Ctx set" where
 "pat_matches p B = { C | C pc . (C, pc) \<in> pat_instantiations p \<and> pc \<in> bel_patterns B }"
 
@@ -161,9 +159,15 @@ fun update_seq :: "ConcPat \<Rightarrow> ParamBelief Update list" where
 "update_seq (cpatlist (x # xs)) = (update_seq x) + (update_seq (cpatlist xs))"
 
 type_synonym PlanAct = "(ParamBelief Update list \<times> ConcParamAction)"
-type_synonym Plan = "(AbstPat \<times> AbstPat \<times> AbstParamAction) set"
+(*
+priority :: nat
+pattern :: AbstPat
+belief_update_pattern :: AbstPat
+action_pattern :: AbstParamAction
+*)
+type_synonym Plan = "(nat \<times> AbstPat \<times> AbstPat \<times> AbstParamAction) set"
 
-enumtype Phase = percieve | select | exec
+enumtype Phase = perceive | select | exec
 
 fun upd :: "ParamBelief set \<Rightarrow> ParamBelief Update list \<Rightarrow> ParamBelief set" where
 "upd B ((lrn, b) # xs) = upd (B \<union> {b}) xs"|
@@ -177,7 +181,7 @@ zstore BDI_st =
   trm :: "bool"
 
 zoperation Terminate = 
-  pre "phase = percieve"
+  pre "phase = perceive"
   update "[trm \<leadsto> True]"
 
 definition BeliefUpdates :: "ParamBelief Update list set"
@@ -187,12 +191,24 @@ term "upd {} [] :: ParamBelief set"
 
 zoperation Perceive =
   params bm \<in> "BeliefUpdates"
-  pre "phase = percieve"
+  pre "phase = perceive"
   update "[phase \<leadsto> select, beliefs \<leadsto> upd beliefs bm]"
 
+(*
+goal_inspect(Location), location_coordinate(Location, X, Y), ~danger_red, ~danger_orange, ~going(door) -(1)> +going(Location), -goal_inspect(Location), do(move(X, Y))
+
+arrived, going(door) -(2)> -going(door), do(await_decontamination)
+arrived, going(OldLocation), next_location(OldLocation, NewLocation) -(1)> -going(OldLocation), +goal_inspect(NL), -arrived, do(inspect(OldLocation))
+arrived, ~going(OldLocation) -(1)>  -arrived, do(null)
+move_failure -(1)> do(null)
+
+danger_red, ~going(door), location(door, X, Y) -(2)> +going(door), move(X, Y)
+danger_orange, ~going(door), location(door, X, Y) -(2)> +going(door), move(X, Y) ﻿
+ *)
 definition plan :: Plan where
 "plan = {
   (
+    1,
     patlist [pat pos goal_inspect [''Location''],
              pat pos location_coordinate [''Location'', ''X'', ''Y''],
              pat neg danger_red [],
@@ -203,12 +219,14 @@ definition plan :: Plan where
     (move, [''X'', ''Y''])
   ),
   (
+    2,
     patlist [pat pos arrived [],
              pat pos going [''door'']],
     patlist [pat neg going [''door'']],
     (await_decontamination, [])
   ),
   (
+    1,
     patlist [pat pos going [''OldLocation''],
              pat pos next_location [''OldLocation'', ''NewLocation'']],
     patlist [pat neg going [''OldLocation''],
@@ -217,17 +235,20 @@ definition plan :: Plan where
     (inspect, [])
   ),
   (
+    1,
     patlist [pat pos arrived [],
              pat neg going [''OldLocation'']],
     patlist [pat neg arrived []],
     (null, [])
   ),
   (
+    1,
     patlist [pat pos move_failure []],
     patlist [],
     (null, [])
   ),
   (
+    2,
     patlist [pat pos danger_red [],
              pat neg going [''door''],
              pat pos location [''door'', ''X'', ''Y'']],
@@ -235,6 +256,7 @@ definition plan :: Plan where
     (move, [''X'', ''Y''])
   ),
   (
+    2,
     patlist [pat pos danger_orange [],
              pat neg going [''door''],
              pat pos location [''door'', ''X'', ''Y'']],
@@ -243,20 +265,52 @@ definition plan :: Plan where
   )
 }"
 
-fun next_steps_raw :: "Plan \<Rightarrow> ParamBelief set \<Rightarrow> PlanAct set" where
-"next_steps_raw pla B = {
+fun next_steps_pri :: "nat \<Rightarrow> Plan \<Rightarrow> ParamBelief set \<Rightarrow> PlanAct set" where
+"next_steps_pri pri pla B = {
   (update_seq (instantiate_pat C r), instantiate_act C a)
-  | p r a C . (p, r, a) \<in> pla \<and> C \<in> pat_matches p B
+  | p r a C . (pri, p, r, a) \<in> pla \<and> C \<in> pat_matches p B
 }"
+
+fun min_priority :: "Plan \<Rightarrow> ParamBelief set \<Rightarrow> nat option" where
+"min_priority p B = (
+  if \<exists>i . next_steps_pri i p B \<noteq> {}
+  then Some (Least (\<lambda> n . next_steps_pri n p B \<noteq> {}))
+  else None)"
+
+lemma min_none_cond: "(min_priority p B = None) = (\<forall>i . next_steps_pri i p B = {})"
+  by (auto split: option.splits)
 
 definition null_plan_act :: PlanAct where
 "null_plan_act = ([], (null, []))"
 
 fun next_steps :: "Plan \<Rightarrow> ParamBelief set \<Rightarrow> PlanAct set" where
-"next_steps pla B = (
-if next_steps_raw pla B = {}
-then {null_plan_act}
-else next_steps_raw pla B)"
+"next_steps p B = (case min_priority p B of
+  Some n \<Rightarrow> next_steps_pri n p B |
+  None   \<Rightarrow> {null_plan_act}
+)"
+
+lemma next_steps_nonempty: "next_steps p B \<noteq> {}"
+proof (cases "min_priority p B")
+  case None
+  have "next_steps p B = {null_plan_act}"
+    apply(simp only: next_steps.simps None)
+    by simp
+  then show ?thesis
+    by blast
+next
+  case (Some n)
+  have "Some n = Some (Least (\<lambda> n . next_steps_pri n p B \<noteq> {}))" (is "Some n = Some (Least ?f)")
+    by (metis Some min_priority.elims option.distinct(1))
+  hence "n = Least ?f"
+    by blast
+  hence "next_steps_pri n p B \<noteq> {}"
+    by (metis (mono_tags, lifting) LeastI Some ifSomeE min_priority.elims)
+  moreover have "next_steps p B = next_steps_pri n p B"
+    apply(simp only: next_steps.simps Some)
+    by simp
+  ultimately show ?thesis
+    by simp
+qed
 
 term "([], (null, [])) :: PlanAct"
 
@@ -274,14 +328,14 @@ zoperation NullSelect =
 zoperation Execute =
   params p \<in> "{snd pl}"
   pre "phase = exec"
-  update "[beliefs \<leadsto> upd beliefs (fst pl), phase \<leadsto> percieve]"
+  update "[beliefs \<leadsto> upd beliefs (fst pl), phase \<leadsto> perceive]"
 
 zmachine BDI_Machine =
-  over BDI_st  init "[beliefs \<leadsto> {}, pl \<leadsto> ([], (null, [])), phase \<leadsto> p, trm \<leadsto> False]"
+  over BDI_st  init "[beliefs \<leadsto> {}, pl \<leadsto> ([], (null, [])), phase \<leadsto> perceive, trm \<leadsto> False]"
   operations Terminate Perceive Select NullSelect Execute
   until "trm"
 
-animate BDI_Machine
+(* animate BDI_Machine *)
 
 term "plan"
 
@@ -289,6 +343,8 @@ lemma "deadlock_free BDI_Machine"
   apply deadlock_free
   apply (auto simp add: BeliefUpdates_def)
   apply (meson Phase.exhaust_disc)
+  apply (smt (z3) LeastI)
+  apply (meson Phase.exhaust)+
   apply (metis null_plan_act_def)
   apply (meson Phase.exhaust)+
   done
