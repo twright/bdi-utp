@@ -77,7 +77,7 @@ type_synonym BelPat = "nat list \<Rightarrow> Belief"
 
 datatype AbstPat = 
     pat BelSign Belief "Name list"
-    | patlist "AbstPat list"
+  | patlist "AbstPat list"
 
 instantiation AbstPat :: default
 begin
@@ -111,29 +111,12 @@ fun free_vars :: "AbstPat \<Rightarrow> Name set" where
 "free_vars (pat s b xs) = set xs"|
 "free_vars (patlist xs) = foldl union {} (map free_vars xs)"
 
-(*
-inductive_set
-  bel_patterns  :: "AbstPat \<Rightarrow> AbstPat set"
-  for p :: "AbstPat"
-  where
-"b \<in> B \<Longrightarrow> cpat pos b xs \<in> bel_patterns B"|
-"b \<notin> B \<Longrightarrow> cpat neg b xs \<in> bel_patterns B"|
-"cpatlist [] \<in> bel_patterns B"|
-"x \<in> bel_patterns B \<Longrightarrow> cpatlist xs \<in> bel_patterns B \<Longrightarrow> cpatlist (x # xs) \<in> bel_patterns B"
- *)
-
 fun pat_extentions :: "AbstPat \<Rightarrow> AbstPat set" where
 "pat_extentions (pat s p xs) = {patlist (ys + [pat s p xs] + zs) | ys zs . True}"|
 "pat_extentions (patlist xs) = {patlist (ys + xs + zs) | ys zs . True}"
 
 fun pat_instantiations :: "AbstPat \<Rightarrow> (Ctx \<times> ConcPat) set" where
 "pat_instantiations p = {(C, instantiate_pat C p) | C . True}"
-
-fun pos_beliefs :: "Belief set \<Rightarrow> (BelSign \<times> Belief) set" where
-"pos_beliefs B = { (pos, b) | b . b \<in> B }"
-
-fun neg_beliefs :: "Belief set \<Rightarrow> (BelSign \<times> Belief) set" where
-"neg_beliefs B = { (neg, b) | b . b \<in> B }"
 
 inductive_set
   bel_patterns  :: "ParamBelief set \<Rightarrow> ConcPat set"
@@ -179,6 +162,9 @@ zstore BDI_st =
   pl :: "PlanAct"
   phase :: Phase
   trm :: "bool"
+(*
+  where inv1: "(location, [door, X1, Y1]) \<in> beliefs \<and> (location, [door, X2, Y2]) \<in> beliefs \<longrightarrow> X1 = X2 \<and> Y1 = Y2"
+*)
 
 zoperation Terminate = 
   pre "phase = perceive"
@@ -193,6 +179,11 @@ zoperation Perceive =
   params bm \<in> "BeliefUpdates"
   pre "phase = perceive"
   update "[phase \<leadsto> select, beliefs \<leadsto> upd beliefs bm]"
+
+(*
+ - always believes going or believes arrived
+ - never believes it is going to two different places
+ *)
 
 (*
 goal_inspect(Location), location_coordinate(Location, X, Y), ~danger_red, ~danger_orange, ~going(door) -(1)> +going(Location), -goal_inspect(Location), do(move(X, Y))
@@ -316,6 +307,7 @@ term "([], (null, [])) :: PlanAct"
 
 term "next_steps plan {}"
 
+(*
 zoperation Select =
   params pl' \<in> "next_steps plan beliefs"
   pre "phase = select \<and> beliefs \<noteq> {}"
@@ -329,15 +321,45 @@ zoperation Execute =
   params p \<in> "{snd pl}"
   pre "phase = exec"
   update "[beliefs \<leadsto> upd beliefs (fst pl), phase \<leadsto> perceive]"
+*)
+
+definition BDI_init :: "BDI_st subst" where
+"BDI_init = [beliefs \<leadsto> {}, pl \<leadsto> ([], (null, [])), phase \<leadsto> perceive, trm \<leadsto> False]"
 
 zmachine BDI_Machine =
-  over BDI_st  init "[beliefs \<leadsto> {}, pl \<leadsto> ([], (null, [])), phase \<leadsto> perceive, trm \<leadsto> False]"
-  operations Terminate Perceive Select NullSelect Execute
+  over BDI_st 
+  init BDI_init
+(*  invariant BDI_st_inv *)
+  operations Terminate Perceive (* Select NullSelect Execute *)
   until "trm"
 
 (* animate BDI_Machine *)
 
 term "plan"
+
+zexpr unique_door_location is "\<forall> door X1 X2 Y1 Y2 . (location, [door, X1, Y1]) \<in> beliefs \<and> (location, [door, X2, Y2]) \<in> beliefs \<longrightarrow> X1 = X2 \<and> Y1 = Y2"
+zexpr initial_phase is "phase = Phase.perceive"
+
+(*
+term "beliefs\<^sub>v"
+term "[beliefs \<leadsto> {}, phase \<leadsto> Phase.perceive, pl \<leadsto> ([], null, []), trm \<leadsto> False]"
+term "\<lparr>beliefs\<^sub>v = beliefs\<^sub>v', pl\<^sub>v = (a, aa, b), phase\<^sub>v = ph, trm\<^sub>v = t\<rparr>"
+
+lemma "beliefs\<^sub>v (BDI_init \<lparr>beliefs\<^sub>v = beliefs\<^sub>v', pl\<^sub>v = (ab, aa, b), phase\<^sub>v = ph, trm\<^sub>v = t\<rparr>) = {}"
+  apply(simp add: BDI_init_def)
+  apply(auto)
+  done
+*)
+
+lemma "BDI_init establishes initial_phase"
+  apply(simp add: BDI_init_def)
+  apply(zpog_full)
+  sledgehammer
+
+lemma "BDI_init establishes unique_door_location"
+  apply zpog_full
+  apply(simp_all add: BDI_init_def)
+  sledgehammer
 
 lemma "deadlock_free BDI_Machine"
   apply deadlock_free
@@ -348,5 +370,15 @@ lemma "deadlock_free BDI_Machine"
   apply (metis null_plan_act_def)
   apply (meson Phase.exhaust)+
   done
-  
+
+(* 
+ - small model: model checking of specific example to general result
+ - monitoring action: I expect these things to happen when an action is taken
+*)
+
+(*
+zexpr phase_order is
+"phase = select \<longrightarrow> phase\<acute> = exec"
+*)
+
 end
