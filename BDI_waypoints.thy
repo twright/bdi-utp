@@ -54,6 +54,8 @@ datatype Belief =
   | move_failure
 type_synonym ParamBelief = "Belief \<times> nat list"
 
+definition "perceptibles = {move_failure, location_coordinate}"
+
 instantiation Belief :: Haskell_Show.show
 begin
 
@@ -152,6 +154,11 @@ type_synonym Plan = "(nat \<times> AbstPat \<times> AbstPat \<times> AbstParamAc
 
 enumtype Phase = perceive | select | exec
 
+
+(* - could split up internal beliefs and perception beliefs
+ * - from perception?
+ *)
+
 fun upd :: "ParamBelief set \<Rightarrow> ParamBelief Update list \<Rightarrow> ParamBelief set" where
 "upd B ((lrn, b) # xs) = upd (B \<union> {b}) xs"|
 "upd B ((fgt, b) # xs) = upd (B - {b}) xs"|
@@ -162,6 +169,7 @@ zstore BDI_st =
   pl :: "PlanAct"
   phase :: Phase
   trm :: "bool"
+  (* perceivables :: "Belief set" *)
 (*
   where inv1: "(location, [door, X1, Y1]) \<in> beliefs \<and> (location, [door, X2, Y2]) \<in> beliefs \<longrightarrow> X1 = X2 \<and> Y1 = Y2"
 *)
@@ -170,15 +178,50 @@ zoperation Terminate =
   pre "phase = perceive"
   update "[trm \<leadsto> True]"
 
+(*
 definition BeliefUpdates :: "ParamBelief Update list set"
   where "BeliefUpdates = UNIV"
+*)
+fun belief_updates :: "Belief set \<Rightarrow> ParamBelief Update list set" where
+"belief_updates perm = {[(bm, (b, ns)) . bm \<leftarrow> bms, b \<leftarrow> bs, ns \<leftarrow> nss, b \<in> perm] | bms bs nss . True }"
+
+lemma belief_updates_permitted:
+  "xs \<in> belief_updates perm \<Longrightarrow> (bm, (b, ns)) \<in> set xs \<Longrightarrow> b \<in> perm"
+  apply(auto)
+  by (meson empty_iff)
+
+lemma upd_fgt_lrn:
+  assumes "(x \<in> bels) \<noteq> (x \<in> (upd bels bel_up))"
+  shows "(fgt, x) \<in> set bel_up \<or> (lrn, x) \<in> set bel_up"
+  using assms apply clarsimp
+proof (induction bel_up arbitrary: x bels)
+  case Nil
+  then show ?case
+  by simp
+next
+  case (Cons a bel_up)
+  then show ?case
+    apply(case_tac a)
+    apply(case_tac aa)
+     apply (metis (no_types, lifting) Un_insert_right insert_iff list.set(2) sup_bot.right_neutral upd.simps(1))
+    apply(auto)
+    using Cons.IH apply blast
+    apply (metis Cons.IH Diff_iff)
+    done
+qed
+
+lemma nonpermitted_belief_update:
+  assumes "b \<notin> perm" "bel_up \<in> belief_updates perm"
+  shows "((b, ns) \<in> bels) = ((b, ns) \<in> (upd bels bel_up))"
+  by (meson assms(1) assms(2) belief_updates_permitted upd_fgt_lrn)
 
 term "upd {} [] :: ParamBelief set"
 
+(* add on a whitelist or a blacklist *)
 zoperation Perceive =
-  params bm \<in> "BeliefUpdates"
+  params bel_up \<in> "belief_updates perceptibles"
   pre "phase = perceive"
-  update "[phase \<leadsto> select, beliefs \<leadsto> upd beliefs bm]"
+  update "[phase \<leadsto> select, beliefs \<leadsto> upd beliefs bel_up]"
 
 (*
  - always believes going or believes arrived
@@ -186,11 +229,13 @@ zoperation Perceive =
  *)
 
 (*
-goal_inspect(Location), location_coordinate(Location, X, Y), ~danger_red, ~danger_orange, ~going(door) -(1)> +going(Location), -goal_inspect(Location), do(move(X, Y))
+goal_inspect(Location), location_coordinate(Location, X, Y), ~danger_red, ~danger_orange, ~going(door)
+-(1)> +going(Location), -goal_inspect(Location), do(move(X, Y))
 
 arrived, going(door) -(2)> -going(door), do(await_decontamination)
-arrived, going(OldLocation), next_location(OldLocation, NewLocation) -(1)> -going(OldLocation), +goal_inspect(NL), -arrived, do(inspect(OldLocation))
-arrived, ~going(OldLocation) -(1)>  -arrived, do(null)
+arrived, going(OldLocation), next_location(OldLocation, NewLocation)
+-(1)> -going(OldLocation), +goal_inspect(NL), -arrived, do(inspect(OldLocation))
+arrived, ~going(OldLocation) -(1)> -arrived, do(null)
 move_failure -(1)> do(null)
 
 danger_red, ~going(door), location(door, X, Y) -(2)> +going(door), move(X, Y)
@@ -307,7 +352,6 @@ term "([], (null, [])) :: PlanAct"
 
 term "next_steps plan {}"
 
-(*
 zoperation Select =
   params pl' \<in> "next_steps plan beliefs"
   pre "phase = select \<and> beliefs \<noteq> {}"
@@ -321,51 +365,148 @@ zoperation Execute =
   params p \<in> "{snd pl}"
   pre "phase = exec"
   update "[beliefs \<leadsto> upd beliefs (fst pl), phase \<leadsto> perceive]"
-*)
 
 definition BDI_init :: "BDI_st subst" where
 "BDI_init = [beliefs \<leadsto> {}, pl \<leadsto> ([], (null, [])), phase \<leadsto> perceive, trm \<leadsto> False]"
+
+declare BDI_init_def [simp]
 
 zmachine BDI_Machine =
   over BDI_st 
   init BDI_init
 (*  invariant BDI_st_inv *)
-  operations Terminate Perceive (* Select NullSelect Execute *)
+  operations Terminate Perceive Select NullSelect Execute
   until "trm"
 
 (* animate BDI_Machine *)
 
 term "plan"
 
-zexpr unique_door_location is "\<forall> door X1 X2 Y1 Y2 . (location, [door, X1, Y1]) \<in> beliefs \<and> (location, [door, X2, Y2]) \<in> beliefs \<longrightarrow> X1 = X2 \<and> Y1 = Y2"
+zexpr unique_door_location is "\<forall> door X1 X2 Y1 Y2 . (location, [door, X1, Y1]) \<in> beliefs
+                                                  \<and> (location, [door, X2, Y2]) \<in> beliefs
+                                                 \<longrightarrow> X1 = X2 \<and> Y1 = Y2"
 zexpr initial_phase is "phase = Phase.perceive"
+zexpr unique_going_location is "\<forall> X1 X2 . (going, [X1]) \<in> beliefs
+                                        \<and> (going, [X2]) \<in> beliefs
+                                       \<longrightarrow> X1 = X2"
 
-(*
-term "beliefs\<^sub>v"
-term "[beliefs \<leadsto> {}, phase \<leadsto> Phase.perceive, pl \<leadsto> ([], null, []), trm \<leadsto> False]"
-term "\<lparr>beliefs\<^sub>v = beliefs\<^sub>v', pl\<^sub>v = (a, aa, b), phase\<^sub>v = ph, trm\<^sub>v = t\<rparr>"
-
-lemma "beliefs\<^sub>v (BDI_init \<lparr>beliefs\<^sub>v = beliefs\<^sub>v', pl\<^sub>v = (ab, aa, b), phase\<^sub>v = ph, trm\<^sub>v = t\<rparr>) = {}"
-  apply(simp add: BDI_init_def)
-  apply(auto)
-  done
-*)
+(* Side condition: never perceive that you are going somewhere *)
 
 lemma "BDI_init establishes initial_phase"
-  apply(simp add: BDI_init_def)
-  apply(zpog_full)
-  sledgehammer
+  by zpog_full
 
-lemma "BDI_init establishes unique_door_location"
-  apply zpog_full
-  apply(simp_all add: BDI_init_def)
-  sledgehammer
+lemma "BDI_init establishes unique_going_location"
+  by zpog_full
+
+lemma "Terminate() preserves unique_going_location"
+  by zpog_full
+
+lemma "NullSelect() preserves unique_going_location"
+  by zpog_full
+
+lemma "Select(xs, a, ys) preserves unique_going_location"
+  by zpog_full
+
+lemma perceive_preserves_nonperceivables:
+  assumes "(b \<notin> perceptibles)"
+  shows "Perceive(xs) preserves \<guillemotleft>(b, ns)\<guillemotright> \<in> beliefs"
+proof -
+  {
+    fix beliefs bms bs nss
+    assume 2: "xs = [(bm, b, ns) . bm \<leftarrow> bms, b \<leftarrow> bs, ns \<leftarrow> nss, b \<in> perceptibles]"
+    have 3: "xs \<in> belief_updates perceptibles"
+      by (auto simp add: 2)
+    have "((b, ns) \<in> beliefs) = ((b, ns) \<in> upd beliefs xs)"
+      using nonpermitted_belief_update
+      using 3 assms by blast
+  }
+  hence 1: "\<And>beliefs bms bs nss. xs = [(bm, b, ns) . bm \<leftarrow> bms, b \<leftarrow> bs, ns \<leftarrow> nss, b \<in> perceptibles] \<Longrightarrow>
+                                 ((b, ns) \<in> beliefs) = ((b, ns) \<in> upd beliefs xs)" .
+  show ?thesis
+    apply(zpog_full)
+    using 1 by blast
+qed
+
+(* Together these lemmata should be sufficient for establishing the unique_going_location
+ * property compositionally *)
+
+lemma perceive_preserves_going:
+  "Perceive(xs) preserves (going, [X]) \<in> beliefs"
+  by (simp add: perceive_preserves_nonperceivables perceptibles_def)
+
+lemma perceive_preserves:
+  "Perceive(xs) preserves X1 = X2"
+  by (zpog_full)
+
+lemma hoare_forall_single: 
+  assumes "\<forall> x. \<^bold>{Q x\<^bold>}P\<^bold>{R x\<^bold>}"
+  shows "\<^bold>{\<forall> x. Q x\<^bold>}P\<^bold>{\<forall> x. R x\<^bold>}"
+  using assms apply(hoare_wlp_auto)
+  apply expr_auto
+  apply(simp add: hoare_triple_def)
+  by (smt (verit, best) wlp_itree_def)
+  (* by metis *)
+
+lemma hoare_forall_double:
+  assumes "\<And> x y. \<^bold>{Q x y\<^bold>}P\<^bold>{R x y\<^bold>}"
+  shows "\<^bold>{\<forall> x y. Q x y\<^bold>}P\<^bold>{\<forall> x y. R x y\<^bold>}"
+  using assms apply(hoare_wlp_auto)
+  apply expr_auto
+  apply(simp add: hoare_triple_def)
+  by (smt (verit, best) wlp_itree_def)
+
+lemma hoare_implies:
+  assumes "\<^bold>{a\<^bold>}P\<^bold>{a\<^bold>}" "\<^bold>{b\<^bold>}P\<^bold>{b\<^bold>}"
+  shows "\<^bold>{a\<longrightarrow>b\<^bold>}P\<^bold>{a\<longrightarrow>b\<^bold>}"
+  using assms by hoare_wlp_auto
+
+lemma preserves_implies:
+  assumes "Perceive(xs) preserves a" "Perceive(xs) preserves b"
+  shows "Perceive(xs) preserves (a \<longrightarrow> b)"
+  by (simp add: hoare_alt_def)
+
+lemma preserves_neg:
+  assumes "Perceive(xs) preserves a"
+  shows "Perceive(xs) preserves (\<not> a)"
+  by (simp add: hoare_alt_def)
+
+(* It should be possible to replace this with a compositional proof based on the lemmata above,
+ * however, technical issues to do with how UTP expressions are parsed are getting in the way of
+ * this *)
+lemma perceive_pereserves_unique_going:
+  "Perceive(xs) preserves unique_going_location"
+proof -
+  {
+    fix beliefs::"ParamBelief set"
+    fix bms bs nss X1 X2
+    assume 1: "\<forall>X1 X2. (going, [X1]) \<in> beliefs \<and> (going, [X2]) \<in> beliefs \<longrightarrow> X1 = X2"
+    assume 2: "xs = [(bm, b, ns) . bm \<leftarrow> bms, b \<leftarrow> bs, ns \<leftarrow> nss, b \<in> perceptibles]" (is "xs = ?xs")
+    have 5: "?xs \<in> belief_updates perceptibles"
+      by (auto)
+    assume 3: "(going, [X1]) \<in> upd beliefs ?xs"
+    assume 4: "(going, [X2]) \<in> upd beliefs ?xs"
+    have 6: "going \<notin> perceptibles"
+      by (simp add: perceptibles_def)
+    have 7: "(going, [X1]) \<in> beliefs" "(going, [X2]) \<in> beliefs"
+      using 6 5 3 nonpermitted_belief_update apply presburger
+      using 6 5 4 nonpermitted_belief_update apply presburger
+      done
+    then have "X1 = X2"
+      using 1 by auto
+  }
+  thus ?thesis
+    apply(simp add: unique_going_location_def)
+    apply(zpog_full)
+    done
+qed
 
 lemma "deadlock_free BDI_Machine"
   apply deadlock_free
-  apply (auto simp add: BeliefUpdates_def)
+  apply (auto)
   apply (meson Phase.exhaust_disc)
   apply (smt (z3) LeastI)
+  apply (meson Phase.exhaust)+
+  apply metis
   apply (meson Phase.exhaust)+
   apply (metis null_plan_act_def)
   apply (meson Phase.exhaust)+
