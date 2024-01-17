@@ -52,6 +52,7 @@ datatype Belief =
   | next_location
   | location
   | move_failure
+  | unlearnable (* a belief which can never be learned *)
 type_synonym ParamBelief = "Belief \<times> nat list"
 
 definition "perceptibles = {move_failure, location_coordinate}"
@@ -68,7 +69,8 @@ fun show_Belief :: "Belief \<Rightarrow> string" where
 "show_Belief arrived = ''arrived''"|
 "show_Belief next_location = ''next_location''"|
 "show_Belief location = ''location''"|
-"show_Belief move_failure = ''move_failure''"
+"show_Belief move_failure = ''move_failure''"|
+"show_Belief unlearnable = ''unlearnable''"
 
 instance ..
 
@@ -141,7 +143,7 @@ type_synonym 'b Update = "(BelMod \<times> 'b)"
 fun update_seq :: "ConcPat \<Rightarrow> ParamBelief Update list" where
 "update_seq (cpat s b xs) = [((if s = pos then lrn else fgt), (b, xs))]"|
 "update_seq (cpatlist []) = []"|
-"update_seq (cpatlist (x # xs)) = (update_seq x) + (update_seq (cpatlist xs))"
+"update_seq (cpatlist (x # xs)) = update_seq x @ update_seq (cpatlist xs)"
 
 type_synonym PlanAct = "(ParamBelief Update list \<times> ConcParamAction)"
 (*
@@ -357,9 +359,10 @@ zoperation Select =
   pre "phase = select \<and> beliefs \<noteq> {}"
   update "[phase \<leadsto> exec, pl \<leadsto> pl']"
 
+(* should skip straight back to perceive phase if we have no beliefs *)
 zoperation NullSelect =
   pre "phase = select \<and> beliefs = {}"
-  update "[phase \<leadsto> exec]"
+  update "[phase \<leadsto> perceive]"
 
 zoperation Execute =
   params p \<in> "{snd pl}"
@@ -382,34 +385,59 @@ zmachine BDI_Machine =
 
 term "plan"
 
+(*
 zexpr unique_door_location is "\<forall> door X1 X2 Y1 Y2 . (location, [door, X1, Y1]) \<in> beliefs
                                                   \<and> (location, [door, X2, Y2]) \<in> beliefs
                                                  \<longrightarrow> X1 = X2 \<and> Y1 = Y2"
+ *)
 zexpr initial_phase is "phase = Phase.perceive"
 zexpr unique_going_location is "\<forall> X1 X2 . (going, [X1]) \<in> beliefs
                                         \<and> (going, [X2]) \<in> beliefs
                                        \<longrightarrow> X1 = X2"
+(* zexpr valid_going_location is "\<forall> X. (going, [X]) \<in> beliefs \<longrightarrow> X \<in> {''door'', ''Location''}" *)
+zexpr exec_next_steps is "phase = Phase.exec \<longrightarrow> pl \<in> next_steps plan beliefs"
+
+lemma "BDI_init establishes exec_next_steps"
+  by zpog_full
+
+lemma "Terminate() preserves exec_next_steps"
+  by zpog_full
+
+lemma "NullSelect() preserves exec_next_steps"
+  by zpog_full
+
+lemma "Select(xs) preserves exec_next_steps"
+  by zpog_full
+
+lemma "Execute(p) preserves exec_next_steps"
+  by zpog_full
 
 (* Side condition: never perceive that you are going somewhere *)
 
 lemma "BDI_init establishes initial_phase"
   by zpog_full
 
-lemma "BDI_init establishes unique_going_location"
+fun unlearnable_unbelieved_prop where
+"unlearnable_unbelieved_prop bs = (\<forall> xs. (unlearnable, xs) \<notin> bs)"
+
+zexpr unlearnable_unbelieved is "unlearnable_unbelieved_prop beliefs"
+
+lemma "BDI_init establishes unlearnable_unbelieved"
   by zpog_full
 
-lemma "Terminate() preserves unique_going_location"
+
+lemma "Terminate() preserves unlearnable_unbelieved"
   by zpog_full
 
-lemma "NullSelect() preserves unique_going_location"
+lemma "NullSelect() preserves unlearnable_unbelieved"
   by zpog_full
 
-lemma "Select(xs, a, ys) preserves unique_going_location"
+lemma "Select(xs) preserves unlearnable_unbelieved"
   by zpog_full
 
 lemma perceive_preserves_nonperceivables:
   assumes "(b \<notin> perceptibles)"
-  shows "Perceive(xs) preserves \<guillemotleft>(b, ns)\<guillemotright> \<in> beliefs"
+  shows "Perceive(xs) preserves (b, ns) \<in> beliefs"
 proof -
   {
     fix beliefs bms bs nss
@@ -426,6 +454,137 @@ proof -
     apply(zpog_full)
     using 1 by blast
 qed
+
+lemma "Perceive(xs) preserves unlearnable_unbelieved"
+proof -
+  {
+    fix beliefs::"ParamBelief set"
+    fix bms :: "BelMod list"
+    fix bs
+    fix nss :: "nat list list"
+    fix zs
+    assume 1: "\<forall>xs. (unlearnable, xs) \<notin> beliefs"
+    let ?ys = "[(bm, b, ns) . bm \<leftarrow> bms, b \<leftarrow> bs, ns \<leftarrow> nss, b \<in> perceptibles]"
+    have 5: "?ys \<in> belief_updates perceptibles"
+      by (auto)
+    have 6: "unlearnable \<notin> perceptibles"
+      by (simp add: perceptibles_def)
+    have "(unlearnable, zs) \<notin> upd beliefs ?ys"
+      using "1" "5" "6" nonpermitted_belief_update by blast
+  }
+  thus ?thesis
+    apply(simp add: unlearnable_unbelieved_def)
+    apply(zpog_full)
+    done
+qed
+
+
+text \<open> Want a good way to say that a given plan preserves a property on belief sets \<close>
+
+type_synonym Belief_Set_Prop = "ParamBelief set \<Rightarrow> bool"
+
+fun preserves_belief_set_prop :: "Plan \<Rightarrow> Belief_Set_Prop \<Rightarrow> bool" where
+"preserves_belief_set_prop pla bsp = (\<forall> bs.
+                                      \<forall> (up, a) \<in> next_steps pla bs.
+                                      bsp bs = bsp(upd bs up))"
+
+fun unique_going_location_prop :: "Belief_Set_Prop" where
+"unique_going_location_prop bs = (\<forall> X1 X2 . (going, [X1]) \<in> bs
+                                          \<and> (going, [X2]) \<in> bs
+                                         \<longrightarrow> X1 = X2)"
+
+lemma rulewise_plan_preservation:
+  assumes "\<forall> (i, p1, p2, a) \<in> pla. \<forall> bs. \<forall> C \<in> pat_matches p1 bs.
+           bsp bs = bsp (upd bs (update_seq (instantiate_pat C p2)))"
+  shows "preserves_belief_set_prop pla bsp"
+  using assms by (auto simp add: null_plan_act_def)
+
+lemma rulewise_plan_preservation_weak:
+  assumes "\<forall> (i, p1, p2, a) \<in> pla. \<forall> bs. \<forall> C.
+           bsp bs = bsp (upd bs (update_seq (instantiate_pat C p2)))"
+  shows "preserves_belief_set_prop pla bsp"
+  using assms by (auto simp add: null_plan_act_def)
+
+lemma upd_seq_step:
+  shows "b \<in> upd bs xs = (
+         (b \<in> bs \<and> (fgt, b) \<notin> set xs)
+       \<or> (\<exists> i. i < length xs \<and> (lrn, b) = (nth xs i) \<and> (\<forall> j. j > i \<and> j < length xs \<longrightarrow> (fgt, b) \<noteq> (nth xs j))))"
+proof (induction xs arbitrary: bs rule: upd.induct)
+  case (1 B b xs)
+  then show ?case
+    apply(simp)
+    apply(safe)
+    apply (metis Suc_less_eq Suc_pred in_set_conv_nth less_Suc_eq_0_disj nth_Cons_0)
+    apply (smt (verit) Suc_diff_Suc cancel_comm_monoid_add_class.diff_zero less_Suc_eq_0_disj not_less_eq nth_Cons_Suc)
+    apply (smt (verit, ccfv_threshold) Suc_pred not_gr_zero not_less_eq nth_Cons_Suc zero_less_Suc)
+    apply (metis (no_types, lifting) One_nat_def diff_Suc_1 less_Suc_eq_0_disj nth_Cons_0 nth_Cons_Suc old.prod.inject)
+    apply (metis (no_types, lifting) One_nat_def diff_Suc_1 in_set_conv_nth less_Suc_eq_0_disj nth_Cons_Suc)
+    done
+next
+  case (2 B b xs)
+  then show ?case
+    apply(simp)
+    apply(safe)
+    apply (smt (verit, ccfv_threshold) Suc_pred not_gr_zero not_less_eq nth_Cons_Suc zero_less_Suc)
+    apply (smt (verit, ccfv_threshold) Suc_pred not_gr_zero not_less_eq nth_Cons_Suc zero_less_Suc)
+    apply (smt (verit, ccfv_SIG) Suc_pred not_gr_zero not_less_eq nth_Cons_Suc zero_less_Suc)
+    apply (metis (no_types, lifting) BelMod.distinct_disc(1) One_nat_def diff_Suc_1 less_Suc_eq_0_disj nth_Cons_0 nth_Cons_Suc old.prod.inject)
+    apply (metis (no_types, lifting) BelMod.distinct_disc(1) One_nat_def diff_Suc_1 less_Suc_eq_0_disj nth_Cons_0 nth_Cons_Suc old.prod.inject)
+    apply (metis (no_types, lifting) BelMod.distinct_disc(1) One_nat_def diff_Suc_1 less_Suc_eq_0_disj nth_Cons_0 nth_Cons_Suc old.prod.inject)
+    done
+next
+  case (3 B)
+  then show ?case
+    by simp
+qed
+
+text \<open>We can characterize the update sequence in terms of whether we learn (lrns) a given belief,
+      and whether we subsequently forget (fgts) it\<close>
+
+fun lrns fgts where
+"lrns b [] = False"|
+"fgts b [] = False"|
+"lrns b (x # xs) = ((x = (lrn, b)) \<and> (\<not> fgts b xs) \<or> lrns b xs)"|
+"fgts b (x # xs) = ((x = (fgt, b)) \<and> (\<not> lrns b xs) \<or> fgts b xs)"
+
+lemma upd_seq_step_lrns_fgts:
+  "b \<in> upd bs xs = ((b \<in> bs \<and> \<not> fgts b xs) \<or> (lrns b xs))"
+  apply (induction xs arbitrary: bs rule: upd.induct)
+  apply auto
+  done
+
+lemma unlearnable_unbelieved_prop_preservation: "preserves_belief_set_prop plan (unlearnable_unbelieved_prop)"
+  apply(rule rulewise_plan_preservation_weak)
+  apply(simp add: plan_def)
+  done
+
+lemma exec_prop_preservation:
+  assumes "preserves_belief_set_prop plan prop"
+  shows "Execute(xs) preserves prop beliefs under exec_next_steps"
+  using assms apply (simp add: prog_defs hl_via_wlp wp usubst_eval z_defs del: next_steps.simps)
+  by (smt (verit, best) SEXP_def case_prod_beta' taut_def)
+
+lemma "Execute(xs) preserves unlearnable_unbelieved under exec_next_steps"
+proof -
+  have "Execute(xs) preserves unlearnable_unbelieved_prop beliefs under exec_next_steps"
+    using exec_prop_preservation unlearnable_unbelieved_prop_preservation by blast
+  thus ?thesis
+    by (hoare_wlp_auto)
+qed
+
+text \<open>Unique going location proofs\<close>
+
+lemma "BDI_init establishes unique_going_location"
+  by zpog_full
+
+lemma "Terminate() preserves unique_going_location"
+  by zpog_full
+
+lemma "NullSelect() preserves unique_going_location"
+  by zpog_full
+
+lemma "Select(xs) preserves unique_going_location"
+  by zpog_full
 
 (* Together these lemmata should be sufficient for establishing the unique_going_location
  * property compositionally *)
@@ -500,6 +659,12 @@ proof -
     done
 qed
 
+lemma "preserves_belief_set_prop plan (unique_going_location_prop)"
+  apply(rule rulewise_plan_preservation_weak)
+  apply(simp add: plan_def)
+  apply(safe)
+  oops
+
 lemma "deadlock_free BDI_Machine"
   apply deadlock_free
   apply (auto)
@@ -516,6 +681,8 @@ lemma "deadlock_free BDI_Machine"
  - small model: model checking of specific example to general result
  - monitoring action: I expect these things to happen when an action is taken
 *)
+
+(* need to establish that pl is always a possible step of the plan *)
 
 (*
 zexpr phase_order is
