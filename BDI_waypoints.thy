@@ -11,6 +11,7 @@ datatype Action
   | await_decontamination
   | inspect
   | null
+  | impossible_action (* an example of an impossible action *)
 
 instantiation Action :: Haskell_Show.show
 begin
@@ -170,6 +171,9 @@ zstore BDI_st =
   beliefs :: "ParamBelief set"
   pl :: "PlanAct"
   phase :: Phase
+  (* trace capturing the sequencing of each action *)
+  (* do we also need a trace capturing the belief state over time *)
+  act_tr :: "ConcParamAction list"
   trm :: "bool"
   (* perceivables :: "Belief set" *)
 (*
@@ -365,12 +369,11 @@ zoperation NullSelect =
   update "[phase \<leadsto> perceive]"
 
 zoperation Execute =
-  params p \<in> "{snd pl}"
   pre "phase = exec"
-  update "[beliefs \<leadsto> upd beliefs (fst pl), phase \<leadsto> perceive]"
+  update "[beliefs \<leadsto> upd beliefs (fst pl), phase \<leadsto> perceive, act_tr \<leadsto> act_tr @ [snd pl]]"
 
 definition BDI_init :: "BDI_st subst" where
-"BDI_init = [beliefs \<leadsto> {}, pl \<leadsto> ([], (null, [])), phase \<leadsto> perceive, trm \<leadsto> False]"
+"BDI_init = [beliefs \<leadsto> {}, pl \<leadsto> ([], (null, [])), phase \<leadsto> perceive, trm \<leadsto> False, act_tr \<leadsto> []]"
 
 declare BDI_init_def [simp]
 
@@ -396,6 +399,7 @@ zexpr unique_going_location is "\<forall> X1 X2 . (going, [X1]) \<in> beliefs
                                        \<longrightarrow> X1 = X2"
 (* zexpr valid_going_location is "\<forall> X. (going, [X]) \<in> beliefs \<longrightarrow> X \<in> {''door'', ''Location''}" *)
 zexpr exec_next_steps is "phase = Phase.exec \<longrightarrow> pl \<in> next_steps plan beliefs"
+zexpr impossible_action_impossible is "\<forall> xs. (impossible_action, xs) \<notin> set act_tr"
 
 lemma "BDI_init establishes exec_next_steps"
   by zpog_full
@@ -477,7 +481,6 @@ proof -
     apply(zpog_full)
     done
 qed
-
 
 text \<open> Want a good way to say that a given plan preserves a property on belief sets \<close>
 
@@ -571,6 +574,29 @@ proof -
   thus ?thesis
     by (hoare_wlp_auto)
 qed
+
+text \<open>Impossible action should not occur\<close>
+
+lemma "BDI_init establishes impossible_action_impossible"
+  by (zpog_full)
+
+lemma "Perceive(xs) preserves impossible_action_impossible"
+  by (zpog_full)
+
+lemma "NullSelect() preserves impossible_action_impossible"
+  by (zpog_full)
+
+lemma "Select(xs) preserves impossible_action_impossible"
+  by (zpog_full)
+
+lemma "Terminate() preserves impossible_action_impossible"
+  by (zpog_full)
+
+lemma "Execute() preserves impossible_action_impossible under exec_next_steps"
+  apply (zpog_full)
+  apply(auto simp add: plan_def)
+  apply (metis Action.distinct(19) null_plan_act_def prod.inject snd_conv)
+  done
 
 text \<open>Unique going location proofs\<close>
 
