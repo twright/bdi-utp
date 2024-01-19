@@ -85,15 +85,6 @@ plan = "{
   )
 }"
 
-section \<open>Machine definition\<close>
-
-zmachine BDI_Machine =
-  over BDI_st 
-  init BDI_init
-  invariant exec_next_steps
-  operations Terminate Perceive Select NullSelect Execute
-  until "trm"
-
 subsection \<open>Impossible action should not occur\<close>
 
 zexpr impossible_action_impossible is "\<forall> xs. (impossible_action, xs) \<notin> set act_tr"
