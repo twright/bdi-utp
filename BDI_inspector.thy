@@ -50,7 +50,7 @@ plan = "{
     patlist [pat pos going [''OldLocation''],
              pat pos next_location [''OldLocation'', ''NewLocation'']],
     patlist [pat neg going [''OldLocation''],
-             pat pos goal_inspect [''NL''],
+             pat pos goal_inspect [''NewLocation''],
              pat neg arrived []],
     (inspect, [])
   ),
@@ -153,11 +153,70 @@ proof -
     done
 qed
 
+subsection \<open>Goal inspect exclusive with location\<close>
+
+fun goal_inspect_not_going_prop where
+"goal_inspect_not_going_prop bs = (\<forall> X . (goal_inspect, [X]) \<in> bs
+                                     \<longrightarrow> (going, [X]) \<notin> bs)"
+zexpr goal_inspect_not_going is "goal_inspect_not_going_prop beliefs"
+
+lemma "BDI_init establishes goal_inspect_not_going"
+  by zpog_full
+
+lemma "Terminate() preserves goal_inspect_not_going"
+  by zpog_full
+
+lemma "NullSelect() preserves goal_inspect_not_going"
+  by zpog_full
+
+lemma "Select(xs) preserves goal_inspect_not_going"
+  by zpog_full
+
+lemma perceive_pereserves_goal_inspect_not_going:
+  "Perceive(xs) preserves goal_inspect_not_going"
+proof -
+  {
+    fix beliefs::"ParamBelief set"
+    fix bms :: "BelMod list"
+    fix bs
+    fix nss :: "nat list list"
+    fix X
+    assume 1: "\<forall>X. (goal_inspect, [X]) \<in> beliefs \<longrightarrow> (going, [X]) \<notin> beliefs"
+    let ?xs = "[(bm, b, ns) . bm \<leftarrow> bms, b \<leftarrow> bs, ns \<leftarrow> nss, b \<in> perceptibles]"
+    have 5: "?xs \<in> belief_updates perceptibles"
+      by (auto)
+    assume 3: "(goal_inspect, [X]) \<in> upd beliefs ?xs"
+    have 6: "goal_inspect \<notin> perceptibles" "going \<notin> perceptibles"
+      by (simp_all add: perceptibles_def)
+    have 7: "(goal_inspect, [X]) \<in> beliefs"
+      using "3" "5" "6"(1) nonpermitted_belief_update by presburger
+    then have "(going, [X]) \<notin> beliefs"
+      by (simp add: "1")
+    then have "(going, [X]) \<notin> upd beliefs ?xs"
+      using "5" "6"(2) nonpermitted_belief_update by blast
+  }
+  thus ?thesis
+    apply(simp add: goal_inspect_not_going_def)
+    apply(zpog_full)
+    done
+qed
+
+lemma "preserves_belief_set_prop plan (goal_inspect_not_going_prop)"
+  apply(rule rulewise_plan_preservation_match)
+  apply(simp add: plan_def)
+  apply(safe)
+              apply blast
+             prefer 2 apply blast
+  oops
+
+
 subsection \<open>Unique going location proofs\<close>
 
-zexpr unique_going_location is "\<forall> X1 X2 . (going, [X1]) \<in> beliefs
-                                        \<and> (going, [X2]) \<in> beliefs
-                                       \<longrightarrow> X1 = X2"
+fun unique_going_location_prop :: "Belief_Set_Prop" where
+"unique_going_location_prop bs = (\<forall> X1 X2 . (going, [X1]) \<in> bs
+                                          \<and> (going, [X2]) \<in> bs
+                                         \<longrightarrow> X1 = X2)"
+zexpr unique_going_location is "unique_going_location_prop beliefs"
 
 lemma "BDI_init establishes unique_going_location"
   by zpog_full
@@ -190,9 +249,12 @@ lemma perceive_pereserves_unique_going:
 proof -
   {
     fix beliefs::"ParamBelief set"
-    fix bms bs nss X1 X2
+    fix bms :: "BelMod list"
+    fix bs
+    fix nss :: "nat list list"
+    fix X1 X2
     assume 1: "\<forall>X1 X2. (going, [X1]) \<in> beliefs \<and> (going, [X2]) \<in> beliefs \<longrightarrow> X1 = X2"
-    assume 2: "xs = [(bm, b, ns) . bm \<leftarrow> bms, b \<leftarrow> bs, ns \<leftarrow> nss, b \<in> perceptibles]" (is "xs = ?xs")
+    let ?xs = "[(bm, b, ns) . bm \<leftarrow> bms, b \<leftarrow> bs, ns \<leftarrow> nss, b \<in> perceptibles]"
     have 5: "?xs \<in> belief_updates perceptibles"
       by (auto)
     assume 3: "(going, [X1]) \<in> upd beliefs ?xs"
@@ -213,10 +275,24 @@ proof -
 qed
 
 lemma "preserves_belief_set_prop plan (unique_going_location_prop)"
-  apply(rule rulewise_plan_preservation_weak)
+  apply(rule rulewise_plan_preservation_match)
+  apply(simp add: plan_def)
+  apply(auto)
+  
+  oops
+
+fun combined_prop where
+"combined_prop B = (\<forall> X. (((goal_inspect, [X]) \<in> B \<or> (\<exists> Y. (X \<noteq> Y \<and> (going, [Y]) \<in> B)))
+                \<longrightarrow> (going, [X]) \<notin> B) \<and> (((going, [X]) \<in> B \<or> (\<exists> Y. (X \<noteq> Y \<and> (goal_inspect, [Y]) \<in> B)))
+                \<longrightarrow> (goal_inspect, [X]) \<notin> B))"
+
+lemma "preserves_belief_set_prop plan (combined_prop)"
+  apply(rule rulewise_plan_preservation_match)
   apply(simp add: plan_def)
   apply(safe)
+                      apply blast
   oops
+
 
 term BDI_Machine
 

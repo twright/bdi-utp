@@ -105,16 +105,18 @@ fun preserves_belief_set_prop :: "Plan \<Rightarrow> Belief_Set_Prop \<Rightarro
                                       \<forall> (up, a) \<in> next_steps pla bs.
                                       bsp bs = bsp(upd bs up))"
 
-fun unique_going_location_prop :: "Belief_Set_Prop" where
-"unique_going_location_prop bs = (\<forall> X1 X2 . (going, [X1]) \<in> bs
-                                          \<and> (going, [X2]) \<in> bs
-                                         \<longrightarrow> X1 = X2)"
-
 lemma rulewise_plan_preservation:
   assumes "\<forall> (i, p1, p2, a) \<in> pla. \<forall> bs. \<forall> C \<in> pat_matches p1 bs.
            bsp bs = bsp (upd bs (update_seq (instantiate_pat C p2)))"
   shows "preserves_belief_set_prop pla bsp"
   using assms by (auto simp add: null_plan_act_def)
+
+lemma rulewise_plan_preservation_match:
+  assumes "\<forall> (i, p1, p2, a) \<in> pla. \<forall> bs. \<forall> C.
+               matches_pat p1 bs C
+           \<longrightarrow> (bsp bs = bsp (upd bs (update_seq (instantiate_pat C p2))))"
+  shows "preserves_belief_set_prop pla bsp"
+  using assms pat_matches_alt_def rulewise_plan_preservation by force
 
 lemma rulewise_plan_preservation_weak:
   assumes "\<forall> (i, p1, p2, a) \<in> pla. \<forall> bs. \<forall> C.

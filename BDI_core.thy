@@ -152,8 +152,20 @@ inductive_set
 "x \<in> bel_patterns B \<Longrightarrow> cpatlist xs \<in> bel_patterns B \<Longrightarrow>
 cpatlist (x # xs) \<in> bel_patterns B"
 
+(* expansion to full patterns involving fixed value params *)
+fun eval_name :: "Symbol \<Rightarrow> Ctx \<Rightarrow> nat" where
+"eval_name (Var x) C = C x"|
+"eval_name (Val y) C = y"
+
+fun matches_pat :: "AbstPat \<Rightarrow> ParamBelief set \<Rightarrow> Ctx \<Rightarrow> bool" where
+"matches_pat (patlist []) B C = True"|
+"matches_pat (patlist (x#xs)) B C = (matches_pat x B C \<and> matches_pat (patlist xs) B C)"|
+"matches_pat (pat pos b xs) B C = ((b, map C xs) \<in> B)"|
+"matches_pat (pat neg b xs) B C = ((b, map C xs) \<notin> B)"
+
 fun pat_matches :: "AbstPat \<Rightarrow> ParamBelief set \<Rightarrow> Ctx set" where
-"pat_matches p B = { C | C pc . (C, pc) \<in> pat_instantiations p \<and> pc \<in> bel_patterns B }"
+"pat_matches p B = { C | C pc . (C, pc) \<in> pat_instantiations p
+                              \<and> pc \<in> bel_patterns B }"
 
 fun instantiate_act :: "Ctx \<Rightarrow> AbstParamAction \<Rightarrow> ConcParamAction" where
 "instantiate_act C (act, xs) = (act, map C xs)"
@@ -197,6 +209,36 @@ fun next_steps :: "Plan \<Rightarrow> ParamBelief set \<Rightarrow> PlanAct set"
 )"
 
 section \<open>Laws\<close>
+
+lemma pat_matches_alt_def:
+  "pat_matches p B = {C. matches_pat p B C}"
+proof (induction rule: matches_pat.induct)
+  case (1 B C)
+  then show ?case
+    by (auto simp add: bel_patterns.intros)
+next
+  case (2 x xs B C)
+  then show ?case
+    apply (auto)
+    apply(cases rule: bel_patterns.cases, auto)
+    apply(cases rule: bel_patterns.cases, auto)
+    using bel_patterns.intros(4) apply blast
+    done
+next
+  case (3 b xs B C)
+  then show ?case
+    apply (auto)
+    apply(cases rule: bel_patterns.cases, auto)
+    apply (simp add: bel_patterns.intros(1))
+    done
+next
+  case (4 b xs B C)
+  then show ?case
+    apply (auto)
+    apply(cases rule: bel_patterns.cases, auto)
+    apply (simp add: bel_patterns.intros(2))
+    done
+qed
 
 lemma belief_updates_permitted:
   "xs \<in> belief_updates perm \<Longrightarrow> (bm, (b, ns)) \<in> set xs \<Longrightarrow> b \<in> perm"
