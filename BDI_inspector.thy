@@ -29,35 +29,35 @@ def_consts
 plan = "{
   (
     1,
-    patlist [pat pos goal_inspect [''Location''],
-             pat pos location_coordinate [''Location'', ''X'', ''Y''],
+    patlist [pat pos goal_inspect [Var ''Location''],
+             pat pos location_coordinate [Var ''Location'', Var ''X'', Var ''Y''],
              pat neg danger_red [],
              pat neg danger_orange [],
-             pat neg going [''door'']],
-    patlist [pat pos going [''Location''],
-             pat neg goal_inspect [''Location'']],
-    (move, [''X'', ''Y''])
+             pat neg going [Val (Atom ''door'')]],
+    patlist [pat pos going [Var ''Location''],
+             pat neg goal_inspect [Var ''Location'']],
+    (move, [Var ''X'', Var ''Y''])
   ),
   (
     2,
     patlist [pat pos arrived [],
-             pat pos going [''door'']],
-    patlist [pat neg going [''door'']],
+             pat pos going [Val (Atom ''door'')]],
+    patlist [pat neg going [Val (Atom ''door'')]],
     (await_decontamination, [])
   ),
   (
     1,
-    patlist [pat pos going [''OldLocation''],
-             pat pos next_location [''OldLocation'', ''NewLocation'']],
-    patlist [pat neg going [''OldLocation''],
-             pat pos goal_inspect [''NewLocation''],
+    patlist [pat pos going [Var ''OldLocation''],
+             pat pos next_location [Var ''OldLocation'', Var ''NewLocation'']],
+    patlist [pat neg going [Var ''OldLocation''],
+             pat pos goal_inspect [Var ''NewLocation''],
              pat neg arrived []],
     (inspect, [])
   ),
   (
     1,
     patlist [pat pos arrived [],
-             pat neg going [''OldLocation'']],
+             pat neg going [Var ''OldLocation'']],
     patlist [pat neg arrived []],
     (null, [])
   ),
@@ -70,18 +70,18 @@ plan = "{
   (
     2,
     patlist [pat pos danger_red [],
-             pat neg going [''door''],
-             pat pos location [''door'', ''X'', ''Y'']],
-    patlist [pat pos going [''door'']],
-    (move, [''X'', ''Y''])
+             pat neg going [Val (Atom ''door'')],
+             pat pos location [Val (Atom ''door''), Var ''X'', Var ''Y'']],
+    patlist [pat pos going [Val (Atom ''door'')]],
+    (move, [Var ''X'', Var ''Y''])
   ),
   (
     2,
     patlist [pat pos danger_orange [],
-             pat neg going [''door''],
-             pat pos location [''door'', ''X'', ''Y'']],
-    patlist [pat pos going [''door'']],
-    (move, [''X'', ''Y''])
+             pat neg going [Val (Atom ''door'')],
+             pat pos location [Val (Atom ''door''), Val (Atom ''X''), Val (Atom ''Y'')]],
+    patlist [pat pos going [Val (Atom ''door'')]],
+    (move, [Val (Atom ''X''), Val (Atom ''Y'')])
   )
 }"
 
@@ -136,7 +136,7 @@ proof -
     fix beliefs::"ParamBelief set"
     fix bms :: "BelMod list"
     fix bs
-    fix nss :: "nat list list"
+    fix nss :: "Value list list"
     fix zs
     assume 1: "\<forall>xs. (unlearnable, xs) \<notin> beliefs"
     let ?ys = "[(bm, b, ns) . bm \<leftarrow> bms, b \<leftarrow> bs, ns \<leftarrow> nss, b \<in> perceptibles]"
@@ -179,7 +179,7 @@ proof -
     fix beliefs::"ParamBelief set"
     fix bms :: "BelMod list"
     fix bs
-    fix nss :: "nat list list"
+    fix nss :: "Value list list"
     fix X
     assume 1: "\<forall>X. (goal_inspect, [X]) \<in> beliefs \<longrightarrow> (going, [X]) \<notin> beliefs"
     let ?xs = "[(bm, b, ns) . bm \<leftarrow> bms, b \<leftarrow> bs, ns \<leftarrow> nss, b \<in> perceptibles]"
@@ -251,7 +251,7 @@ proof -
     fix beliefs::"ParamBelief set"
     fix bms :: "BelMod list"
     fix bs
-    fix nss :: "nat list list"
+    fix nss :: "Value list list"
     fix X1 X2
     assume 1: "\<forall>X1 X2. (going, [X1]) \<in> beliefs \<and> (going, [X2]) \<in> beliefs \<longrightarrow> X1 = X2"
     let ?xs = "[(bm, b, ns) . bm \<leftarrow> bms, b \<leftarrow> bs, ns \<leftarrow> nss, b \<in> perceptibles]"
@@ -307,6 +307,5 @@ lemma "deadlock_free BDI_Machine"
   apply (metis null_plan_act_def)
   apply (meson Phase.exhaust)+
   done
-
 
 end

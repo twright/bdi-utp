@@ -6,7 +6,8 @@ section \<open>Core BDI data types\<close>
 
 type_synonym Name = string
 (* for symplicity assume all values are nats *)
-type_synonym Ctx = "string \<Rightarrow> nat"
+datatype Value = Atom Name | Nat nat
+type_synonym Ctx = "string \<Rightarrow> Value"
 
 datatype Action
   = move
@@ -38,8 +39,10 @@ instance ..
 
 end
 
-type_synonym ConcParamAction = "Action \<times> nat list"
-type_synonym AbstParamAction = "Action \<times> Name list"
+datatype Symbol = Var Name | Val Value
+
+type_synonym ConcParamAction = "Action \<times> Value list"
+type_synonym AbstParamAction = "Action \<times> Symbol list"
 
 enumtype BelMod = lrn | fgt
 
@@ -56,7 +59,7 @@ datatype Belief =
   | location
   | move_failure
   | unlearnable (* a belief which can never be learned *)
-type_synonym ParamBelief = "Belief \<times> nat list"
+type_synonym ParamBelief = "Belief \<times> Value list"
 
 definition "perceptibles = {move_failure, location_coordinate}"
 
@@ -79,11 +82,8 @@ instance ..
 
 end
 
-datatype Symbol = Var Name | Val nat
-type_synonym BelPat = "nat list \<Rightarrow> Belief"
-
 datatype AbstPat = 
-    pat BelSign Belief "Name list"
+    pat BelSign Belief "Symbol list"
   | patlist "AbstPat list"
 
 instantiation AbstPat :: default
@@ -97,7 +97,7 @@ instance ..
 end
 
 datatype ConcPat = 
-    cpat BelSign Belief "nat list"
+    cpat BelSign Belief "Value list"
   | cpatlist "ConcPat list"
 
 instantiation ConcPat :: default
@@ -127,12 +127,17 @@ section \<open>Functions\<close>
 
 subsection \<open>Plan rule instantiation\<close>
 
+(* expansion to full patterns involving fixed value params *)
+fun eval_name :: "Ctx \<Rightarrow> Symbol \<Rightarrow> Value" where
+"eval_name C (Var x) = C x"|
+"eval_name C (Val y) = y"
+
 fun instantiate_pat :: "Ctx \<Rightarrow> AbstPat \<Rightarrow> ConcPat" where
-"instantiate_pat C (pat s b xs) = (cpat s b (map C xs))"|
+"instantiate_pat C (pat s b xs) = (cpat s b (map (eval_name C) xs))"|
 "instantiate_pat C (patlist xs) = (cpatlist (map (instantiate_pat C) xs))"
 
 fun free_vars :: "AbstPat \<Rightarrow> Name set" where
-"free_vars (pat s b xs) = set xs"|
+"free_vars (pat s b xs) = {x | x.  Var x \<in> set xs}"|
 "free_vars (patlist xs) = foldl union {} (map free_vars xs)"
 
 fun pat_extentions :: "AbstPat \<Rightarrow> AbstPat set" where
@@ -152,23 +157,18 @@ inductive_set
 "x \<in> bel_patterns B \<Longrightarrow> cpatlist xs \<in> bel_patterns B \<Longrightarrow>
 cpatlist (x # xs) \<in> bel_patterns B"
 
-(* expansion to full patterns involving fixed value params *)
-fun eval_name :: "Symbol \<Rightarrow> Ctx \<Rightarrow> nat" where
-"eval_name (Var x) C = C x"|
-"eval_name (Val y) C = y"
-
 fun matches_pat :: "AbstPat \<Rightarrow> ParamBelief set \<Rightarrow> Ctx \<Rightarrow> bool" where
 "matches_pat (patlist []) B C = True"|
 "matches_pat (patlist (x#xs)) B C = (matches_pat x B C \<and> matches_pat (patlist xs) B C)"|
-"matches_pat (pat pos b xs) B C = ((b, map C xs) \<in> B)"|
-"matches_pat (pat neg b xs) B C = ((b, map C xs) \<notin> B)"
+"matches_pat (pat pos b xs) B C = ((b, map (eval_name C) xs) \<in> B)"|
+"matches_pat (pat neg b xs) B C = ((b, map (eval_name C) xs) \<notin> B)"
 
 fun pat_matches :: "AbstPat \<Rightarrow> ParamBelief set \<Rightarrow> Ctx set" where
 "pat_matches p B = { C | C pc . (C, pc) \<in> pat_instantiations p
                               \<and> pc \<in> bel_patterns B }"
 
 fun instantiate_act :: "Ctx \<Rightarrow> AbstParamAction \<Rightarrow> ConcParamAction" where
-"instantiate_act C (act, xs) = (act, map C xs)"
+"instantiate_act C (act, xs) = (act, map (eval_name C) xs)"
 
 subsection \<open>Belief updates\<close>
 
