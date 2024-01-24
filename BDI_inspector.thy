@@ -24,7 +24,22 @@ danger_red, ~going(door), location(door, X, Y) -(2)> +going(door), move(X, Y)
 danger_orange, ~going(door), location(door, X, Y) -(2)> +going(door), move(X, Y) ﻿
  \<close>
 
+def_consts
+plan = "{
+  (
+    1,
+    patlist [pat pos goal_inspect [Var ''Location''],
+             pat pos location_coordinate [Var ''Location'', Var ''X'', Var ''Y''],
+             pat neg danger_red [],
+             pat neg danger_orange [],
+             pat neg going [Val (Atom ''door'')]],
+    patlist [pat pos going [Var ''Location''],
+             pat neg goal_inspect [Var ''Location'']],
+    (move, [Var ''X'', Var ''Y''])
+  )
+}"
 
+(*
 def_consts
 plan = "{
   (
@@ -39,13 +54,6 @@ plan = "{
     (move, [Var ''X'', Var ''Y''])
   ),
   (
-    2,
-    patlist [pat pos arrived [],
-             pat pos going [Val (Atom ''door'')]],
-    patlist [pat neg going [Val (Atom ''door'')]],
-    (await_decontamination, [])
-  ),
-  (
     1,
     patlist [pat pos going [Var ''OldLocation''],
              pat pos next_location [Var ''OldLocation'', Var ''NewLocation'']],
@@ -53,37 +61,9 @@ plan = "{
              pat pos goal_inspect [Var ''NewLocation''],
              pat neg arrived []],
     (inspect, [])
-  ),
-  (
-    1,
-    patlist [pat pos arrived [],
-             pat neg going [Var ''OldLocation'']],
-    patlist [pat neg arrived []],
-    (null, [])
-  ),
-  (
-    1,
-    patlist [pat pos move_failure []],
-    patlist [],
-    (null, [])
-  ),
-  (
-    2,
-    patlist [pat pos danger_red [],
-             pat neg going [Val (Atom ''door'')],
-             pat pos location [Val (Atom ''door''), Var ''X'', Var ''Y'']],
-    patlist [pat pos going [Val (Atom ''door'')]],
-    (move, [Var ''X'', Var ''Y''])
-  ),
-  (
-    2,
-    patlist [pat pos danger_orange [],
-             pat neg going [Val (Atom ''door'')],
-             pat pos location [Val (Atom ''door''), Val (Atom ''X''), Val (Atom ''Y'')]],
-    patlist [pat pos going [Val (Atom ''door'')]],
-    (move, [Val (Atom ''X''), Val (Atom ''Y'')])
   )
 }"
+*)
 
 subsection \<open>Impossible action should not occur\<close>
 
@@ -205,8 +185,6 @@ lemma "preserves_belief_set_prop plan (goal_inspect_not_going_prop)"
   apply(rule rulewise_plan_preservation_match)
   apply(simp add: plan_def)
   apply(safe)
-              apply blast
-             prefer 2 apply blast
   oops
 
 
@@ -277,20 +255,38 @@ qed
 lemma "preserves_belief_set_prop plan (unique_going_location_prop)"
   apply(rule rulewise_plan_preservation_match)
   apply(simp add: plan_def)
-  apply(auto)
-  
   oops
 
+fun combined_prop where
+"combined_prop B = (\<forall> X Y.
+                    (((goal_inspect, [X]) \<in> B \<or> (going, [X]) \<in> B)
+                   \<and> ((goal_inspect, [Y]) \<in> B \<or> (going, [Y]) \<in> B))
+                \<longrightarrow> X = Y)"
+
+
+(*
 fun combined_prop where
 "combined_prop B = (\<forall> X. (((goal_inspect, [X]) \<in> B \<or> (\<exists> Y. (X \<noteq> Y \<and> (going, [Y]) \<in> B)))
                 \<longrightarrow> (going, [X]) \<notin> B) \<and> (((going, [X]) \<in> B \<or> (\<exists> Y. (X \<noteq> Y \<and> (goal_inspect, [Y]) \<in> B)))
                 \<longrightarrow> (goal_inspect, [X]) \<notin> B))"
+*)
 
 lemma "preserves_belief_set_prop plan (combined_prop)"
   apply(rule rulewise_plan_preservation_match)
   apply(simp add: plan_def)
   apply(safe)
-                      apply blast
+  apply blast
+  apply presburger
+  apply presburger
+  apply presburger
+  apply presburger
+  apply presburger
+  apply presburger
+  apply presburger
+  apply blast
+  apply blast
+  apply blast
+  apply blast
   oops
 
 
