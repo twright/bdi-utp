@@ -82,6 +82,17 @@ instance ..
 
 end
 
+instantiation Value :: Haskell_Show.show
+begin
+
+fun show_Value :: "Value \<Rightarrow> string" where 
+"show_Value (Atom x) = ''Atom'' + x"|
+"show_Value (Nat n) = ''Nat'' + show n"
+
+instance ..
+
+end
+
 datatype AbstPat = 
     pat BelSign Belief "Symbol list"
   | patlist "AbstPat list"

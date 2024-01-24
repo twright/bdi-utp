@@ -24,22 +24,21 @@ danger_red, ~going(door), location(door, X, Y) -(2)> +going(door), move(X, Y)
 danger_orange, ~going(door), location(door, X, Y) -(2)> +going(door), move(X, Y) ﻿
  \<close>
 
+(*
 def_consts
 plan = "{
   (
     1,
-    patlist [pat pos goal_inspect [Var ''Location''],
-             pat pos location_coordinate [Var ''Location'', Var ''X'', Var ''Y''],
-             pat neg danger_red [],
-             pat neg danger_orange [],
-             pat neg going [Val (Atom ''door'')]],
-    patlist [pat pos going [Var ''Location''],
-             pat neg goal_inspect [Var ''Location'']],
-    (move, [Var ''X'', Var ''Y''])
+    patlist [pat pos going [Var ''OldLocation''],
+             pat pos next_location [Var ''OldLocation'', Var ''NewLocation'']],
+    patlist [pat neg going [Var ''OldLocation''],
+             pat pos goal_inspect [Var ''NewLocation''],
+             pat neg arrived []],
+    (inspect, [])
   )
 }"
+*)
 
-(*
 def_consts
 plan = "{
   (
@@ -63,7 +62,6 @@ plan = "{
     (inspect, [])
   )
 }"
-*)
 
 subsection \<open>Impossible action should not occur\<close>
 
@@ -257,38 +255,26 @@ lemma "preserves_belief_set_prop plan (unique_going_location_prop)"
   apply(simp add: plan_def)
   oops
 
-fun combined_prop where
-"combined_prop B = (\<forall> X Y.
-                    (((goal_inspect, [X]) \<in> B \<or> (going, [X]) \<in> B)
-                   \<and> ((goal_inspect, [Y]) \<in> B \<or> (going, [Y]) \<in> B))
-                \<longrightarrow> X = Y)"
-
-
 (*
 fun combined_prop where
-"combined_prop B = (\<forall> X. (((goal_inspect, [X]) \<in> B \<or> (\<exists> Y. (X \<noteq> Y \<and> (going, [Y]) \<in> B)))
-                \<longrightarrow> (going, [X]) \<notin> B) \<and> (((going, [X]) \<in> B \<or> (\<exists> Y. (X \<noteq> Y \<and> (goal_inspect, [Y]) \<in> B)))
-                \<longrightarrow> (goal_inspect, [X]) \<notin> B))"
+"combined_prop B = (\<forall> X Y.
+                    ((((goal_inspect, [X]) \<in> B \<or> (going, [X]) \<in> B)
+                   \<and> ((goal_inspect, [Y]) \<in> B \<or> (going, [Y]) \<in> B))
+                \<longrightarrow> X = Y))"
 *)
+
+fun combined_prop where
+"combined_prop B = ((\<forall> X.
+                    (goal_inspect, [X]) \<in> B
+                \<longrightarrow> ((\<forall> Y. (going, [Y]) \<notin> B) \<and> (\<forall> Y. (goal_inspect, [Y]) \<in> B \<longrightarrow> X = Y)))
+                 \<and>  (\<forall> X.
+                    (going, [X]) \<in> B
+                \<longrightarrow> ((\<forall> Y. (goal_inspect, [Y]) \<notin> B) \<and> (\<forall> Y. (going, [Y]) \<in> B \<longrightarrow> X = Y))))"
 
 lemma "preserves_belief_set_prop plan (combined_prop)"
   apply(rule rulewise_plan_preservation_match)
-  apply(simp add: plan_def)
-  apply(safe)
-  apply blast
-  apply presburger
-  apply presburger
-  apply presburger
-  apply presburger
-  apply presburger
-  apply presburger
-  apply presburger
-  apply blast
-  apply blast
-  apply blast
-  apply blast
-  oops
-
+  apply(auto simp add: rulewise_plan_preservation_match plan_def)
+  done
 
 term BDI_Machine
 

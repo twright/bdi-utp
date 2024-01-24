@@ -103,30 +103,60 @@ type_synonym Belief_Set_Prop = "ParamBelief set \<Rightarrow> bool"
 fun preserves_belief_set_prop :: "Plan \<Rightarrow> Belief_Set_Prop \<Rightarrow> bool" where
 "preserves_belief_set_prop pla bsp = (\<forall> bs.
                                       \<forall> (up, a) \<in> next_steps pla bs.
-                                      bsp bs = bsp(upd bs up))"
+                                      bsp bs \<longrightarrow> bsp(upd bs up))"
+
+fun conditionally_preserves_belief_set_prop :: "Plan \<Rightarrow> Belief_Set_Prop \<Rightarrow> Belief_Set_Prop \<Rightarrow> bool" where
+"conditionally_preserves_belief_set_prop pla prebsp bsp =
+  (\<forall> bs. \<forall> (up, a) \<in> next_steps pla bs. prebsp bs \<and> bsp bs \<longrightarrow> bsp(upd bs up))"
 
 lemma rulewise_plan_preservation:
   assumes "\<forall> (i, p1, p2, a) \<in> pla. \<forall> bs. \<forall> C \<in> pat_matches p1 bs.
-           bsp bs = bsp (upd bs (update_seq (instantiate_pat C p2)))"
+           bsp bs \<longrightarrow> bsp (upd bs (update_seq (instantiate_pat C p2)))"
   shows "preserves_belief_set_prop pla bsp"
   using assms by (auto simp add: null_plan_act_def)
 
 lemma rulewise_plan_preservation_match:
   assumes "\<forall> (i, p1, p2, a) \<in> pla. \<forall> bs. \<forall> C.
                matches_pat p1 bs C
-           \<longrightarrow> (bsp bs = bsp (upd bs (update_seq (instantiate_pat C p2))))"
+           \<longrightarrow> (bsp bs \<longrightarrow> bsp (upd bs (update_seq (instantiate_pat C p2))))"
   shows "preserves_belief_set_prop pla bsp"
   using assms pat_matches_alt_def rulewise_plan_preservation by force
 
 lemma rulewise_plan_preservation_weak:
   assumes "\<forall> (i, p1, p2, a) \<in> pla. \<forall> bs. \<forall> C.
-           bsp bs = bsp (upd bs (update_seq (instantiate_pat C p2)))"
+           bsp bs \<longrightarrow> bsp (upd bs (update_seq (instantiate_pat C p2)))"
   shows "preserves_belief_set_prop pla bsp"
+  using assms by (auto simp add: null_plan_act_def)
+
+lemma cond_rulewise_plan_preservation:
+  assumes "\<forall> (i, p1, p2, a) \<in> pla. \<forall> bs. \<forall> C \<in> pat_matches p1 bs.
+           prebsp bs \<and> bsp bs \<longrightarrow> bsp (upd bs (update_seq (instantiate_pat C p2)))"
+  shows "conditionally_preserves_belief_set_prop pla prebsp bsp"
+  using assms by (auto simp add: null_plan_act_def)
+
+lemma cond_rulewise_plan_preservation_match:
+  assumes "\<forall> (i, p1, p2, a) \<in> pla. \<forall> bs. \<forall> C.
+             matches_pat p1 bs C
+           \<and> prebsp bs \<and> bsp bs \<longrightarrow> bsp (upd bs (update_seq (instantiate_pat C p2)))"
+  shows "conditionally_preserves_belief_set_prop pla prebsp bsp"
+  by (smt (verit, ccfv_SIG) assms case_prod_beta' cond_rulewise_plan_preservation mem_Collect_eq pat_matches_alt_def)
+
+lemma cond_rulewise_plan_preservation_weak:
+  assumes "\<forall> (i, p1, p2, a) \<in> pla. \<forall> bs. \<forall> C.
+           prebsp bs \<and> bsp bs \<longrightarrow> bsp (upd bs (update_seq (instantiate_pat C p2)))"
+  shows "conditionally_preserves_belief_set_prop pla prebsp bsp"
   using assms by (auto simp add: null_plan_act_def)
 
 lemma exec_prop_preservation:
   assumes "preserves_belief_set_prop plan prop"
   shows "Execute(xs) preserves prop beliefs under exec_next_steps"
+  using assms apply (simp add: prog_defs hl_via_wlp wp usubst_eval z_defs del: next_steps.simps)
+  by (smt (verit, best) SEXP_def case_prod_beta' taut_def)
+
+
+lemma exec_prop_preservation_given:
+  assumes "conditionally_preserves_belief_set_prop plan preprop prop"
+  shows "Execute(xs) preserves prop beliefs under (exec_next_steps \<and> preprop beliefs)"
   using assms apply (simp add: prog_defs hl_via_wlp wp usubst_eval z_defs del: next_steps.simps)
   by (smt (verit, best) SEXP_def case_prod_beta' taut_def)
 
