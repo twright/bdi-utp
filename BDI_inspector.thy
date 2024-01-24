@@ -53,6 +53,13 @@ plan = "{
     (move, [Var ''X'', Var ''Y''])
   ),
   (
+    2,
+    patlist [pat pos arrived [],
+             pat pos going [Val (Atom ''door'')]],
+    patlist [pat neg going [Val (Atom ''door'')]],
+    (await_decontamination, [])
+  ),
+  (
     1,
     patlist [pat pos going [Var ''OldLocation''],
              pat pos next_location [Var ''OldLocation'', Var ''NewLocation'']],
@@ -60,6 +67,19 @@ plan = "{
              pat pos goal_inspect [Var ''NewLocation''],
              pat neg arrived []],
     (inspect, [])
+  ),
+  (
+    1,
+    patlist [pat pos arrived [],
+             pat neg going [Var ''OldLocation'']],
+    patlist [pat neg arrived []],
+    (null, [])
+  ),
+  (
+    1,
+    patlist [pat pos move_failure []],
+    patlist [],
+    (null, [])
   )
 }"
 
