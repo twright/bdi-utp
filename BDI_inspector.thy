@@ -80,6 +80,42 @@ plan = "{
     patlist [pat pos move_failure []],
     patlist [],
     (null, [])
+  ),
+  (
+    2,
+    patlist [pat pos danger_red [],
+             pat neg going [Val (Atom ''door'')],
+             pat pos going [Var ''Z''],
+             pat pos location [Val (Atom ''door''), Var ''X'', Var ''Y'']],
+    patlist [pat pos going [Val (Atom ''door'')], pat neg going [Var ''Z'']],
+    (move, [Var ''X'', Var ''Y''])
+  ),
+  (
+    2,
+    patlist [pat pos danger_orange [],
+             pat neg going [Val (Atom ''door'')],
+             pat pos going [Var ''Z''],
+             pat pos location [Val (Atom ''door''), Val (Atom ''X''), Val (Atom ''Y'')]],
+    patlist [pat pos going [Val (Atom ''door'')], pat neg going [Var ''Z'']],
+    (move, [Val (Atom ''X''), Val (Atom ''Y'')])
+  ),
+  (
+    2,
+    patlist [pat pos danger_red [],
+             pat neg going [Val (Atom ''door'')],
+             pat pos goal_inspect [Var ''Z''],
+             pat pos location [Val (Atom ''door''), Var ''X'', Var ''Y'']],
+    patlist [pat pos going [Val (Atom ''door'')], pat neg goal_inspect [Var ''Z'']],
+    (move, [Var ''X'', Var ''Y''])
+  ),
+  (
+    2,
+    patlist [pat pos danger_orange [],
+             pat neg going [Val (Atom ''door'')],
+             pat pos goal_inspect [Var ''Z''],
+             pat pos location [Val (Atom ''door''), Val (Atom ''X''), Val (Atom ''Y'')]],
+    patlist [pat pos going [Val (Atom ''door'')], pat neg goal_inspect [Var ''Z'']],
+    (move, [Val (Atom ''X''), Val (Atom ''Y'')])
   )
 }"
 
