@@ -16,12 +16,14 @@ goal_inspect(Location), location_coordinate(Location, X, Y), ~danger_red, ~dange
 
 arrived, going(door) -(2)> -going(door), do(await_decontamination)
 arrived, going(OldLocation), next_location(OldLocation, NewLocation)
--(1)> -going(OldLocation), +goal_inspect(NL), -arrived, do(inspect(OldLocation))
+-(1)> -going(OldLocation), +goal_inspect(NewLocation), -arrived, do(inspect(OldLocation))
 arrived, ~going(OldLocation) -(1)> -arrived, do(null)
 move_failure -(1)> do(null)
 
-danger_red, ~going(door), location(door, X, Y) -(2)> +going(door), move(X, Y)
-danger_orange, ~going(door), location(door, X, Y) -(2)> +going(door), move(X, Y) ﻿
+danger_red, ~going(door), location(door, X, Y), going(Loc) -(2)> +going(door), -going(Loc), move(X, Y)
+danger_orange, ~going(door), location(door, X, Y), going(Loc) -(2)> +going(door), -going(Loc), move(X, Y)
+danger_red, ~going(door), location(door, X, Y), goal_inspect(Loc) -(2)> +going(door), -goal_inspect(Loc), move(X, Y)
+danger_orange, ~going(door), location(door, X, Y), goal_inspect(Loc) -(2)> +going(door), -goal_inspect(Loc), move(X, Y)
  \<close>
 
 (*
@@ -159,7 +161,8 @@ lemma unlearnable_unbelieved_prop_preservation: "preserves_belief_set_prop plan 
 lemma "Execute(xs) preserves unlearnable_unbelieved under exec_next_steps"
 proof -
   have "Execute(xs) preserves unlearnable_unbelieved_prop beliefs under exec_next_steps"
-    using exec_prop_preservation unlearnable_unbelieved_prop_preservation by blast
+    using exec_prop_preservation unlearnable_unbelieved_prop_preservation
+    by blast
   thus ?thesis
     by (hoare_wlp_auto)
 qed
