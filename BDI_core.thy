@@ -9,35 +9,22 @@ type_synonym Name = string
 datatype Value = Atom Name | Nat nat
 type_synonym Ctx = "string \<Rightarrow> Value"
 
-datatype Action
+instantiation Value :: Haskell_Show.show
+begin
+
+fun show_Value :: "Value \<Rightarrow> string" where 
+"show_Value (Atom n) = ''Atom('' + show n + '')''" |
+"show_Value (Nat n)  = ''Nat('' + show n + '')''"
+
+instance ..
+end
+
+enumtype Action
   = move
   | await_decontamination
   | inspect
   | null
   | impossible_action (* an example of an impossible action *)
-
-instantiation Action :: Haskell_Show.show
-begin
-
-fun show_Action :: "Action \<Rightarrow> string" where 
-"show_Action move = ''move''"|
-"show_Action await_decontamination = ''await_decontamination''"|
-"show_Action inspect = ''inspect''"|
-"show_Action null = ''null''"
-
-instance ..
-
-end
-
-instantiation Action :: default
-begin
-
-definition default_Action :: "Action" where 
-"default_Action = null"
-
-instance ..
-
-end
 
 datatype Symbol = Var Name | Val Value
 
@@ -48,7 +35,7 @@ enumtype BelMod = lrn | fgt
 
 enumtype BelSign = pos | neg
 
-datatype Belief =
+enumtype Belief =
     goal_inspect
   | location_coordinate
   | danger_red
@@ -63,24 +50,6 @@ type_synonym ParamBelief = "Belief \<times> Value list"
 
 definition "perceptibles = {move_failure, location_coordinate}"
 
-instantiation Belief :: Haskell_Show.show
-begin
-
-fun show_Belief :: "Belief \<Rightarrow> string" where 
-"show_Belief goal_inspect = ''goal_inspect''"|
-"show_Belief location_coordinate = ''location_coordinate''"|
-"show_Belief danger_red = ''danger_red''"|
-"show_Belief danger_orange = ''danger_orange''"|
-"show_Belief going = ''going''"|
-"show_Belief arrived = ''arrived''"|
-"show_Belief next_location = ''next_location''"|
-"show_Belief location = ''location''"|
-"show_Belief move_failure = ''move_failure''"|
-"show_Belief unlearnable = ''unlearnable''"
-
-instance ..
-
-end
 
 datatype AbstPat = 
     pat BelSign Belief "Symbol list"
