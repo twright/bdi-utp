@@ -11,6 +11,7 @@ text \<open> Some ideas for properties:
  - never believes it is going to two different places \<close>
 
 text \<open> The machine should implement the following plan:
+\begin{verbatim}
 goal_inspect(Location), location_coordinate(Location, X, Y), ~danger_red, ~danger_orange, ~going(door)
 -(1)> +going(Location), -goal_inspect(Location), do(move(X, Y))
 
@@ -20,11 +21,14 @@ arrived, going(OldLocation), next_location(OldLocation, NewLocation)
 arrived, ~going(OldLocation) -(1)> -arrived, do(null)
 move_failure -(1)> do(null)
 
+danger_red, ~going(door), location(door, X, Y) -(2)> +going(door), move(X, Y)
+
 danger_red, ~going(door), location(door, X, Y), going(Loc) -(2)> +going(door), -going(Loc), move(X, Y)
 danger_orange, ~going(door), location(door, X, Y), going(Loc) -(2)> +going(door), -going(Loc), move(X, Y)
 danger_red, ~going(door), location(door, X, Y), goal_inspect(Loc) -(2)> +going(door), -goal_inspect(Loc), move(X, Y)
 danger_orange, ~going(door), location(door, X, Y), goal_inspect(Loc) -(2)> +going(door), -goal_inspect(Loc), move(X, Y)
- \<close>
+\end{verbatim}
+\<close>
 
 (*
 def_consts
@@ -200,8 +204,10 @@ zexpr goal_inspect_not_going is "goal_inspect_not_going_prop beliefs"
 lemma "BDI_init establishes goal_inspect_not_going"
   by zpog_full
 
+(*
 lemma "Terminate() preserves goal_inspect_not_going"
   by zpog_full
+*)
 
 lemma "NullSelect() preserves goal_inspect_not_going"
   by zpog_full
@@ -256,8 +262,10 @@ zexpr unique_going_location is "unique_going_location_prop beliefs"
 lemma "BDI_init establishes unique_going_location"
   by zpog_full
 
+(*
 lemma "Terminate() preserves unique_going_location"
   by zpog_full
+*)
 
 lemma "NullSelect() preserves unique_going_location"
   by zpog_full
@@ -322,18 +330,63 @@ fun combined_prop where
                 \<longrightarrow> X = Y))"
 *)
 
-fun combined_prop where
-"combined_prop B = ((\<forall> X.
+definition unique_target where
+"unique_target B = ((\<forall> X.
                     (goal_inspect, [X]) \<in> B
-                \<longrightarrow> ((\<forall> Y. (going, [Y]) \<notin> B) \<and> (\<forall> Y. (goal_inspect, [Y]) \<in> B \<longrightarrow> X = Y)))
+                \<longrightarrow> (  (\<forall> Y. (going, [Y]) \<notin> B)
+                     \<and> (\<forall> Y. (goal_inspect, [Y]) \<in> B \<longrightarrow> X = Y)))
                  \<and>  (\<forall> X.
                     (going, [X]) \<in> B
-                \<longrightarrow> ((\<forall> Y. (goal_inspect, [Y]) \<notin> B) \<and> (\<forall> Y. (going, [Y]) \<in> B \<longrightarrow> X = Y))))"
+                \<longrightarrow> (  (\<forall> Y. (goal_inspect, [Y]) \<notin> B)
+                     \<and> (\<forall> Y. (going, [Y]) \<in> B \<longrightarrow> X = Y))))"
 
-lemma "preserves_belief_set_prop plan (combined_prop)"
+lemma preserves_belief_set: "preserves_belief_set_prop plan (unique_target)"
   apply(rule rulewise_plan_preservation_match)
-  apply(auto simp add: rulewise_plan_preservation_match plan_def)
+  apply(auto simp add: rulewise_plan_preservation_match plan_def unique_target_def)
   done
+
+lemma "Execute() preserves unique_target beliefs under exec_next_steps"
+  using exec_prop_preservation preserves_belief_set by blast
+
+lemma "unique_target B \<longrightarrow> unique_going_location_prop B"
+  by (auto simp add: unique_target_def)
+
+lemma "BDI_init establishes unique_target beliefs"
+  by (zpog_full add: unique_target_def)
+
+(*
+lemma "Terminate() preserves unique_target beliefs"
+  by (zpog_full add: unique_target_def)
+*)
+
+lemma "NullSelect() preserves unique_target beliefs"
+  by zpog_full
+
+lemma "Select(xs) preserves unique_target beliefs"
+  by zpog_full
+
+lemma perceive_pereserves_unique_target:
+  "Perceive(xs) preserves unique_target beliefs"
+proof -
+  {
+    fix beliefs::"ParamBelief set"
+    fix bms :: "BelMod list"
+    fix bs
+    fix nss :: "Value list list"
+    assume 1: "unique_target beliefs"
+    let ?xs = "[(bm, b, ns) . bm \<leftarrow> bms, b \<leftarrow> bs, ns \<leftarrow> nss, b \<in> perceptibles]"
+    have 5: "?xs \<in> belief_updates perceptibles"
+      by (auto)
+    have "unique_target (upd beliefs ?xs)"
+      using 1 apply (simp add: unique_target_def)
+      by (metis (no_types, lifting) "5" Belief.distinct(1) Belief.distinct(15) Belief.simps(24) Belief.simps(68) empty_iff insert_iff nonpermitted_belief_update perceptibles_def)+
+  }
+  hence 1: "\<And>nss bs bms beliefs. unique_target beliefs \<Longrightarrow> unique_target (upd beliefs (concat (map (\<lambda>bm. concat (map (\<lambda>b. concat (map (\<lambda>ns. if b \<in> perceptibles then [(bm, b, ns)] else []) nss)) bs)) bms)))"
+    by blast
+  show ?thesis
+    apply(zpog_full)
+    by (simp add: 1)
+qed
 
 term BDI_Machine
 
@@ -343,10 +396,14 @@ lemma "deadlock_free BDI_Machine"
   apply (meson Phase.exhaust_disc)
   apply (smt (z3) LeastI)
   apply (meson Phase.exhaust)+
-  apply metis
-  apply (meson Phase.exhaust)+
+  apply metis+
+  apply (metis null_plan_act_def)
   apply (metis null_plan_act_def)
   apply (meson Phase.exhaust)+
   done
+
+(*
+animate BDI_Machine
+ *)
 
 end

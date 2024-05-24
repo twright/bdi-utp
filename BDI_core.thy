@@ -9,6 +9,7 @@ type_synonym Name = string
 datatype Value = Atom Name | Nat nat
 type_synonym Ctx = "string \<Rightarrow> Value"
 
+(* make enum types? *)
 datatype Action
   = move
   | await_decontamination
@@ -158,25 +159,21 @@ fun pat_extentions :: "AbstPat \<Rightarrow> AbstPat set" where
 fun pat_instantiations :: "AbstPat \<Rightarrow> (Ctx \<times> ConcPat) set" where
 "pat_instantiations p = {(C, instantiate_pat C p) | C . True}"
 
-inductive_set
-  bel_patterns  :: "ParamBelief set \<Rightarrow> ConcPat set"
-  for B :: "ParamBelief set"
-  where
-"(b, xs) \<in> B \<Longrightarrow> cpat pos b xs \<in> bel_patterns B"|
-"(b, xs) \<notin> B \<Longrightarrow> cpat neg b xs \<in> bel_patterns B"|
-"cpatlist [] \<in> bel_patterns B"|
-"x \<in> bel_patterns B \<Longrightarrow> cpatlist xs \<in> bel_patterns B \<Longrightarrow>
-cpatlist (x # xs) \<in> bel_patterns B"
-
 fun matches_pat :: "AbstPat \<Rightarrow> ParamBelief set \<Rightarrow> Ctx \<Rightarrow> bool" where
 "matches_pat (patlist []) B C = True"|
 "matches_pat (patlist (x#xs)) B C = (matches_pat x B C \<and> matches_pat (patlist xs) B C)"|
 "matches_pat (pat pos b xs) B C = ((b, map (eval_name C) xs) \<in> B)"|
 "matches_pat (pat neg b xs) B C = ((b, map (eval_name C) xs) \<notin> B)"
 
+
+fun pat_matches :: "AbstPat \<Rightarrow> ParamBelief set \<Rightarrow> Ctx set" where
+"pat_matches p B = { C | C . matches_pat p B C }"
+
+(*
 fun pat_matches :: "AbstPat \<Rightarrow> ParamBelief set \<Rightarrow> Ctx set" where
 "pat_matches p B = { C | C pc . (C, pc) \<in> pat_instantiations p
                               \<and> pc \<in> bel_patterns B }"
+ *)
 
 fun instantiate_act :: "Ctx \<Rightarrow> AbstParamAction \<Rightarrow> ConcParamAction" where
 "instantiate_act C (act, xs) = (act, map (eval_name C) xs)"
@@ -221,36 +218,6 @@ fun next_steps :: "Plan \<Rightarrow> ParamBelief set \<Rightarrow> PlanAct set"
 
 section \<open>Laws\<close>
 
-lemma pat_matches_alt_def:
-  "pat_matches p B = {C. matches_pat p B C}"
-proof (induction rule: matches_pat.induct)
-  case (1 B C)
-  then show ?case
-    by (auto simp add: bel_patterns.intros)
-next
-  case (2 x xs B C)
-  then show ?case
-    apply (auto)
-    apply(cases rule: bel_patterns.cases, auto)
-    apply(cases rule: bel_patterns.cases, auto)
-    using bel_patterns.intros(4) apply blast
-    done
-next
-  case (3 b xs B C)
-  then show ?case
-    apply (auto)
-    apply(cases rule: bel_patterns.cases, auto)
-    apply (simp add: bel_patterns.intros(1))
-    done
-next
-  case (4 b xs B C)
-  then show ?case
-    apply (auto)
-    apply(cases rule: bel_patterns.cases, auto)
-    apply (simp add: bel_patterns.intros(2))
-    done
-qed
-
 lemma belief_updates_permitted:
   "xs \<in> belief_updates perm \<Longrightarrow> (bm, (b, ns)) \<in> set xs \<Longrightarrow> b \<in> perm"
   apply(auto)
@@ -286,7 +253,7 @@ proof (induction xs arbitrary: bs rule: upd.induct)
     apply(simp)
     apply(safe)
     apply (metis Suc_less_eq Suc_pred in_set_conv_nth less_Suc_eq_0_disj nth_Cons_0)
-    apply (smt (verit) Suc_diff_Suc cancel_comm_monoid_add_class.diff_zero less_Suc_eq_0_disj not_less_eq nth_Cons_Suc)
+    apply (smt (verit, ccfv_SIG) Suc_less_eq Suc_pred less_nat_zero_code linorder_neqE_nat nth_Cons_Suc)
     apply (smt (verit, ccfv_threshold) Suc_pred not_gr_zero not_less_eq nth_Cons_Suc zero_less_Suc)
     apply (metis (no_types, lifting) One_nat_def diff_Suc_1 less_Suc_eq_0_disj nth_Cons_0 nth_Cons_Suc old.prod.inject)
     apply (metis (no_types, lifting) One_nat_def diff_Suc_1 in_set_conv_nth less_Suc_eq_0_disj nth_Cons_Suc)

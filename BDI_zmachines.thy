@@ -13,13 +13,15 @@ zstore BDI_st =
   (* trace capturing the sequencing of each action *)
   (* do we also need a trace capturing the belief state over time *)
   act_tr :: "ConcParamAction list"
-  trm :: "bool"
+  (* trm :: "bool" *)
 
 section \<open> BDI ZMachine operations \<close>
 
+(*
 zoperation Terminate = 
   pre "phase = perceive"
   update "[trm \<leadsto> True]"
+*)
 
 zoperation Perceive =
   params bel_up \<in> "belief_updates perceptibles"
@@ -40,8 +42,9 @@ zoperation Execute =
   pre "phase = exec"
   update "[beliefs \<leadsto> upd beliefs (fst pl), phase \<leadsto> perceive, act_tr \<leadsto> act_tr @ [snd pl]]"
 
+(* trm \<leadsto> False *)
 definition BDI_init :: "BDI_st subst" where
-"BDI_init = [beliefs \<leadsto> {}, pl \<leadsto> ([], (null, [])), phase \<leadsto> perceive, trm \<leadsto> False, act_tr \<leadsto> []]"
+"BDI_init = [beliefs \<leadsto> {}, pl \<leadsto> ([], (null, [])), phase \<leadsto> perceive, act_tr \<leadsto> []]"
 
 declare BDI_init_def [simp]
 
@@ -50,8 +53,9 @@ section \<open>ZMachine definition\<close>
 zmachine BDI_Machine =
   over BDI_st 
   init BDI_init
-  operations Terminate Perceive Select NullSelect Execute
-  until "trm"
+  operations Perceive Select NullSelect Execute
+  (* Terminate *)
+  (* until "trm" *)
 
 section \<open>Basic BDI invariants\<close>
 
@@ -60,8 +64,10 @@ zexpr exec_next_steps is "phase = Phase.exec \<longrightarrow> pl \<in> next_ste
 lemma "BDI_init establishes exec_next_steps"
   by zpog_full
 
+(*
 lemma "Terminate() preserves exec_next_steps"
   by zpog_full
+*)
 
 lemma "NullSelect() preserves exec_next_steps"
   by zpog_full
@@ -120,7 +126,8 @@ lemma rulewise_plan_preservation_match:
                matches_pat p1 bs C
            \<longrightarrow> (bsp bs \<longrightarrow> bsp (upd bs (update_seq (instantiate_pat C p2))))"
   shows "preserves_belief_set_prop pla bsp"
-  using assms pat_matches_alt_def rulewise_plan_preservation by force
+  using assms rulewise_plan_preservation
+  by (smt (verit) case_prod_beta' mem_Collect_eq pat_matches.simps)
 
 lemma rulewise_plan_preservation_weak:
   assumes "\<forall> (i, p1, p2, a) \<in> pla. \<forall> bs. \<forall> C.
@@ -139,7 +146,8 @@ lemma cond_rulewise_plan_preservation_match:
              matches_pat p1 bs C
            \<and> prebsp bs \<and> bsp bs \<longrightarrow> bsp (upd bs (update_seq (instantiate_pat C p2)))"
   shows "conditionally_preserves_belief_set_prop pla prebsp bsp"
-  by (smt (verit, ccfv_SIG) assms case_prod_beta' cond_rulewise_plan_preservation mem_Collect_eq pat_matches_alt_def)
+  by (smt (verit, ccfv_threshold) assms case_prod_beta' cond_rulewise_plan_preservation
+      mem_Collect_eq pat_matches.simps)
 
 lemma cond_rulewise_plan_preservation_weak:
   assumes "\<forall> (i, p1, p2, a) \<in> pla. \<forall> bs. \<forall> C.
