@@ -161,10 +161,10 @@ fun pat_instantiations :: "AbstPat \<Rightarrow> (Ctx \<times> ConcPat) set" whe
 
 fun matches_pat :: "AbstPat \<Rightarrow> ParamBelief set \<Rightarrow> Ctx \<Rightarrow> bool" where
 "matches_pat (patlist []) B C = True"|
-"matches_pat (patlist (x#xs)) B C = (matches_pat x B C \<and> matches_pat (patlist xs) B C)"|
+"matches_pat (patlist (x#xs)) B C = (matches_pat x B C
+                                   \<and> matches_pat (patlist xs) B C)"|
 "matches_pat (pat pos b xs) B C = ((b, map (eval_name C) xs) \<in> B)"|
 "matches_pat (pat neg b xs) B C = ((b, map (eval_name C) xs) \<notin> B)"
-
 
 fun pat_matches :: "AbstPat \<Rightarrow> ParamBelief set \<Rightarrow> Ctx set" where
 "pat_matches p B = { C | C . matches_pat p B C }"

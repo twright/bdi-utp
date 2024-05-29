@@ -59,23 +59,22 @@ zmachine BDI_Machine =
 
 section \<open>Basic BDI invariants\<close>
 
-zexpr exec_next_steps is "phase = Phase.exec \<longrightarrow> pl \<in> next_steps plan beliefs"
+zexpr exec_next_steps is "phase = Phase.exec
+                      \<longrightarrow> pl \<in> next_steps plan beliefs"
 
 lemma "BDI_init establishes exec_next_steps"
   by zpog_full
 
-(*
-lemma "Terminate() preserves exec_next_steps"
+lemma "Perceive(bel_up) preserves exec_next_steps"
   by zpog_full
-*)
 
 lemma "NullSelect() preserves exec_next_steps"
   by zpog_full
 
-lemma "Select(xs) preserves exec_next_steps"
+lemma "Select(pl') preserves exec_next_steps"
   by zpog_full
 
-lemma "Execute(p) preserves exec_next_steps"
+lemma "Execute() preserves exec_next_steps"
   by zpog_full
 
 section \<open>Proof laws\<close>
@@ -111,9 +110,11 @@ fun preserves_belief_set_prop :: "Plan \<Rightarrow> Belief_Set_Prop \<Rightarro
                                       \<forall> (up, a) \<in> next_steps pla bs.
                                       bsp bs \<longrightarrow> bsp(upd bs up))"
 
-fun conditionally_preserves_belief_set_prop :: "Plan \<Rightarrow> Belief_Set_Prop \<Rightarrow> Belief_Set_Prop \<Rightarrow> bool" where
+fun conditionally_preserves_belief_set_prop :: "Plan \<Rightarrow> Belief_Set_Prop
+                                             \<Rightarrow> Belief_Set_Prop \<Rightarrow> bool" where
 "conditionally_preserves_belief_set_prop pla prebsp bsp =
-  (\<forall> bs. \<forall> (up, a) \<in> next_steps pla bs. prebsp bs \<and> bsp bs \<longrightarrow> bsp(upd bs up))"
+  (\<forall> bs. \<forall> (up, a) \<in> next_steps pla bs. prebsp bs \<and> bsp bs
+                                    \<longrightarrow> bsp(upd bs up))"
 
 lemma rulewise_plan_preservation:
   assumes "\<forall> (i, p1, p2, a) \<in> pla. \<forall> bs. \<forall> C \<in> pat_matches p1 bs.
@@ -164,7 +165,8 @@ lemma exec_prop_preservation:
 
 lemma exec_prop_preservation_given:
   assumes "conditionally_preserves_belief_set_prop plan preprop prop"
-  shows "Execute(xs) preserves prop beliefs under (exec_next_steps \<and> preprop beliefs)"
+  shows "Execute(xs) preserves prop beliefs
+                         under (exec_next_steps \<and> preprop beliefs)"
   using assms apply (simp add: prog_defs hl_via_wlp wp usubst_eval z_defs del: next_steps.simps)
   by (smt (verit, best) SEXP_def case_prod_beta' taut_def)
 

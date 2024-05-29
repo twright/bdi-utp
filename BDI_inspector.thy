@@ -50,7 +50,8 @@ plan = "{
   (
     1,
     patlist [pat pos goal_inspect [Var ''Location''],
-             pat pos location_coordinate [Var ''Location'', Var ''X'', Var ''Y''],
+             pat pos location_coordinate [Var ''Location'',
+                                          Var ''X'', Var ''Y''],
              pat neg danger_red [],
              pat neg danger_orange [],
              pat neg going [Val (Atom ''door'')]],
@@ -91,36 +92,36 @@ plan = "{
     2,
     patlist [pat pos danger_red [],
              pat neg going [Val (Atom ''door'')],
-             pat pos going [Var ''Z''],
+             pat pos going [Var ''Loc''],
              pat pos location [Val (Atom ''door''), Var ''X'', Var ''Y'']],
-    patlist [pat pos going [Val (Atom ''door'')], pat neg going [Var ''Z'']],
+    patlist [pat pos going [Val (Atom ''door'')], pat neg going [Var ''Loc'']],
     (move, [Var ''X'', Var ''Y''])
   ),
   (
     2,
     patlist [pat pos danger_orange [],
              pat neg going [Val (Atom ''door'')],
-             pat pos going [Var ''Z''],
+             pat pos going [Var ''Loc''],
              pat pos location [Val (Atom ''door''), Val (Atom ''X''), Val (Atom ''Y'')]],
-    patlist [pat pos going [Val (Atom ''door'')], pat neg going [Var ''Z'']],
+    patlist [pat pos going [Val (Atom ''door'')], pat neg going [Var ''Loc'']],
     (move, [Val (Atom ''X''), Val (Atom ''Y'')])
   ),
   (
     2,
     patlist [pat pos danger_red [],
              pat neg going [Val (Atom ''door'')],
-             pat pos goal_inspect [Var ''Z''],
+             pat pos goal_inspect [Var ''Loc''],
              pat pos location [Val (Atom ''door''), Var ''X'', Var ''Y'']],
-    patlist [pat pos going [Val (Atom ''door'')], pat neg goal_inspect [Var ''Z'']],
+    patlist [pat pos going [Val (Atom ''door'')], pat neg goal_inspect [Var ''Loc'']],
     (move, [Var ''X'', Var ''Y''])
   ),
   (
     2,
     patlist [pat pos danger_orange [],
              pat neg going [Val (Atom ''door'')],
-             pat pos goal_inspect [Var ''Z''],
+             pat pos goal_inspect [Var ''Loc''],
              pat pos location [Val (Atom ''door''), Val (Atom ''X''), Val (Atom ''Y'')]],
-    patlist [pat pos going [Val (Atom ''door'')], pat neg goal_inspect [Var ''Z'']],
+    patlist [pat pos going [Val (Atom ''door'')], pat neg goal_inspect [Var ''Loc'']],
     (move, [Val (Atom ''X''), Val (Atom ''Y'')])
   )
 }"
@@ -139,9 +140,6 @@ lemma "NullSelect() preserves impossible_action_impossible"
   by (zpog_full)
 
 lemma "Select(xs) preserves impossible_action_impossible"
-  by (zpog_full)
-
-lemma "Terminate() preserves impossible_action_impossible"
   by (zpog_full)
 
 lemma "Execute() preserves impossible_action_impossible under exec_next_steps"
